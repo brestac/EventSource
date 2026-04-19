@@ -134,7 +134,11 @@ public:
     const char* err() const { return error.message; }
     int code() { return error.code; }
 
-    Event() = default;
+    Event() {
+      memset(this, 0, sizeof(Event));
+      strncpy(type, "message", sizeof(type));      
+    }
+
     Event(const Event &) = default;
     Event &operator=(const Event &) = default;
 
@@ -737,7 +741,6 @@ void EventSource::_setLastEventId(const char *lastEventId) {
 EventSource::Event EventSource::_newMessageEvent() {
   DEBUG_PRINTLN("Creating new event");
   Event event;
-  strncpy(event.type, "message", sizeof(event.type));
   strncpy(event.origin, _apiHost, sizeof(event.origin));
   return event;
 }
