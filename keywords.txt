@@ -1,0 +1,23 @@
+# Syntax coloring for the EventSource library
+# https://arduino.github.io/arduino-cli/library-specification/#keywords
+
+# ── Class names (KEYWORD1 → orange) ─────────────────────────────────────────
+EventSource	KEYWORD1
+
+# ── Methods / functions (KEYWORD2 → brown) ──────────────────────────────────
+addEventListener	KEYWORD2
+addHeader	KEYWORD2
+setAutoreconnect	KEYWORD2
+setRetryDelay	KEYWORD2
+close	KEYWORD2
+host	KEYWORD2
+path	KEYWORD2
+port	KEYWORD2
+url	KEYWORD2
+readyState	KEYWORD2
+parse_response	KEYWORD2
+
+# ── Constants (LITERAL1 → teal) ──────────────────────────────────────────────
+CONNECTING	LITERAL1
+OPEN	LITERAL1
+CLOSED	LITERAL1

@@ -1,15 +1,20 @@
-#define DEBUG_EVENTSOURCE 1
+/**
+ * BasicEventSource.ino
+ *
+ * Minimal example: connect to an SSE endpoint and print each message
+ * received to the Serial monitor.
+ *
+ * Required libraries:
+ *   - EventSource  (this library)
+ *   - ESPAsyncTCP  https://github.com/me-no-dev/ESPAsyncTCP
+ */
+
+// Uncomment to enable library debug output
+// #define DEBUG_EVENTSOURCE 1
 
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>
-
 #include "credentials.h"
 #include "EventSource.h"
-
-  // EventSource::Options options;
-  // options.retryDelay = 4000;
-  // options.autoReconnect = true;
-  // options.headers = {{"X-Device", "1234567890"}, {"User-Agent", "EventSource/1.0"}};
 
 EventSource source("https://192.168.1.2:4001/events", {{"X-Device", "1234567890"}, {"User-Agent", "EventSource/1.0"}});
 
