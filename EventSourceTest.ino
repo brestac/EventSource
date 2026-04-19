@@ -1,5 +1,4 @@
-#define DEBUG_EVENTSOURCE 0
-#define DEBUG_ESP_PORT Serial
+#define DEBUG_EVENTSOURCE 1
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>

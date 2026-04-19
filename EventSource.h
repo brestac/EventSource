@@ -125,14 +125,14 @@ public:
     };
 
     void print() {
-      DEBUG_PRINTF("[Event] data: '%s', origin: '%s', lastEventId: '%s', "
-                   "message: '%s', code: %d, type: '%s'", data, origin, lastEventId, message, code, type);
+      DEBUG_PRINTF("[Event]  type: '%s', origin: '%s', data: '%s', lastEventId: '%s', "
+                   "error: '%s', code: %d", type, origin, message.data, message.lastEventId, error.message, error.code);
     }
 
     const char* data() const { return message.data; }
     const char* lastEventId() const { return message.lastEventId; }
     const char* err() const { return error.message; }
-    int code() { return error.code; }
+    int code() const { return error.code; }
 
     Event() {
       memset(this, 0, sizeof(Event));
