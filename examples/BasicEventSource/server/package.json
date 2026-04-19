@@ -1,0 +1,28 @@
+{
+  "name": "eventsource",
+  "version": "0.0.1",
+  "description": "EventSource server",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brestac/EventSource.git"
+  },
+  "author": "Romain Brestac",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/brestac/EventSource/issues"
+  },
+  "homepage": "https://github.com/brestac/EventSource#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "http": "^0.0.1-security",
+    "https": "^1.0.0",
+    "path": "^0.12.7"
+  }
+}
