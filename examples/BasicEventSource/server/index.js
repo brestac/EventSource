@@ -5,23 +5,18 @@ import Path from 'path';
 import express from 'express';
 import cors from 'cors';
 
-const EVENTS_PING_INTERVAL_MS = 5 * 1000;
-const KEEP_ALIVE_TIMEOUT_MS = 30 * 1000;
 const SERVER_PORT=4001;
-const SERVER_PORT_SSL=5001;
+//const SERVER_PORT_SSL=5001;
 const SERVER_IP="192.168.1.2";
 
 const app = express();
 
-const serverOptions = {
-    key: fs.readFileSync(`./server.key`, 'utf8'),
-    cert: fs.readFileSync(`./server.crt`, 'utf8'),
-    // Options SSL/TLS renforcées
-    secureProtocol: 'TLSv1_2_method',
-    // ciphers: 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384',
-    // honorCipherOrder: true,
-    //secureOptions: https.SSL_OP_NO_SSLv2 | https.SSL_OP_NO_SSLv3
-};
+// const serverOptions = {
+//     key: fs.readFileSync(`./server.key`, 'utf8'),
+//     cert: fs.readFileSync(`./server.crt`, 'utf8'),
+//     // Options SSL/TLS renforcées
+//     secureProtocol: 'TLSv1_2_method'
+// };
 
 app.use(cors());
 app.use(express.json());
@@ -39,10 +34,8 @@ app.get('/events', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
     res.setHeader('Connection', 'keep-alive');
     res.statusCode = 200;
-    //let timer = setInterval(sendEvent, EVENTS_PING_INTERVAL_MS, res, 'ping', "", false);
 
     req.on('close', () => {
-        //clearInterval(timer);
         console.log('close');
     });
 

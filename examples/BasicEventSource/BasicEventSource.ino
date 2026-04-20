@@ -13,10 +13,12 @@
 // #define DEBUG_EVENTSOURCE 1
 
 #include <ESP8266WiFi.h>
-#include "credentials.h"
-#include "EventSource.h"
+#include <EventSource.h>
 
-EventSource source("https://192.168.1.2:4001/events", {{"X-Device", "1234567890"}, {"User-Agent", "EventSource/1.0"}});
+#define WIFI_SSID "ssid"
+#define WIFI_PASSWORD "password"
+
+EventSource source("https://192.168.1.2:4001/events", {{"X-Device", 123456}, {"User-Agent", "EventSource/1.0"}});
 
 void setup() {
 
@@ -70,12 +72,7 @@ void connectWifi() {
   });
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  /*
-  IPAddress ip(192, 168, 1, 10);
-  IPAddress gateway(192, 168, 1, 1); // set gateway to match your network
-  IPAddress subnet(255, 255, 255, 0); // set subnet mask to match your network
-  WiFi.config(ip, ip, gateway, subnet);
-*/
+
   uint8_t numberOftry = 0;
   while (WiFi.status() != WL_CONNECTED && numberOftry < 10) {
     yield();
