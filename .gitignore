@@ -35,3 +35,6 @@ credentials.h
 #stubs
 ESPAsyncTCP.h
 Ticker.h
+
+examples/BasicEventSource/EventSource.h
+examples/BasicEventSource/EventSource.cpp
