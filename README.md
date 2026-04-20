@@ -26,9 +26,6 @@ The public API mirrors the [W3C EventSource interface](https://developer.mozilla
 
 ## Installation
 
-### Arduino Library Manager *(recommended)*
-Search for **EventSource** and click *Install*.
-
 ### Manual
 Download the ZIP, then in the Arduino IDE: *Sketch → Include Library → Add .ZIP Library…*
 
@@ -40,33 +37,27 @@ Download the ZIP, then in the Arduino IDE: *Sketch → Include Library → Add .
 #include <ESP8266WiFi.h>
 #include "EventSource.h"
 
-EventSource *source = nullptr;
+EventSource events("http://192.168.1.2:4001/events", {{"X-Device", "esp8266"}});
 
 void setup() {
     // … connect to Wi-Fi …
 
-    EventSource::Options opts;
-    opts.autoReconnect = true;
-    opts.retryDelay    = 5000;
-    opts.headers       = {{"X-Device", "esp8266"}};
-
-    source = new EventSource("http://192.168.1.2:4001/events", opts);
-
-    source->addEventListener("open", [](EventSource::Event &e) {
+    events.addEventListener("open", [](EventSource::Event &event) {
         Serial.println("Connected!");
     });
 
-    source->addEventListener("message", [](EventSource::Event &e) {
-        Serial.println(e.message.data);
+    events.addEventListener("message", [](EventSource::Event &event) {
+        Serial.println(event.message.data);
     });
 
-    source->addEventListener("error", [](EventSource::Event &e) {
-        Serial.printf("Error %d: %s\n", e.error.code, e.error.message);
+    events.addEventListener("error", [](EventSource::Event &event) {
+        Serial.printf("Error %d: %s\n", event.error.code, event.error.message);
     });
 }
 
 void loop() {
-    delay(10);
+  events.update();
+  delay(10);
 }
 ```
 
@@ -130,8 +121,20 @@ Define `DEBUG_EVENTSOURCE 1` **before** including the header to enable verbose l
 
 ## Server example (Node.js)
 
-See [`server/`](server/) for a minimal Express SSE server used for testing.
+See [`examples/BasicEventSource/server/`](examples/BasicEventSource/server/) for a minimal Express SSE server used for testing.
 
+Install:
+
+```bash
+cd examples/BasicEventSource/server/
+npm install
+```
+
+Run:
+
+```bash
+npm run start
+```
 ---
 
 ## License

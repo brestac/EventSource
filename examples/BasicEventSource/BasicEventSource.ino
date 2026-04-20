@@ -49,8 +49,6 @@ void setup() {
 
 void loop() {
     source.update();
-    ESP.wdtFeed();  // nourrit explicitement le HW WDT
-    yield();
     delay(100);
 }
 
