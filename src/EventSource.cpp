@@ -148,34 +148,42 @@ void EventSource::update() {
 
 // ---------- header management ----------
 
-void EventSource::_addHeader(const char *key, const char *val,
-                              size_t key_len, size_t value_len) {
-  if (_customHeaderCount >= MAX_HEADER_COUNT) return;
-  if (key == nullptr || val == nullptr ||
-      key_len == 0   || value_len == 0 ||
-      key_len > MAX_HEADER_KEY_SIZE || value_len > MAX_HEADER_VAL_SIZE) return;
+void EventSource::_addHeader(const char *key, size_t key_len, const CustomHeaderValue &value) {
+  if (_customHeaderCount >= MAX_HEADER_COUNT)
+    return;
+  if (key == nullptr || key_len == 0 || key_len > MAX_HEADER_KEY_SIZE)
+    return;
 
-  // Forbidden headers
-  if (strcmp(key, "Last-Event-ID")      == 0 ||
-      strcmp(key, "Content-Type")       == 0 ||
-      strcmp(key, "Content-Length")     == 0 ||
-      strcmp(key, "Transfer-Encoding")  == 0 ||
-      strcmp(key, "Connection")         == 0 ||
-      strcmp(key, "Keep-Alive")         == 0 ||
-      strcmp(key, "Accept")             == 0 ||
-      strcmp(key, "Cache-Control")      == 0 ||
-      strcmp(key, "Accept-Encoding")    == 0 ||
-      strcmp(key, "Host")               == 0) {
+  if (strcmp(key, "Last-Event-ID") == 0 || strcmp(key, "Content-Type") == 0 ||
+      strcmp(key, "Content-Length") == 0 ||
+      strcmp(key, "Transfer-Encoding") == 0 || strcmp(key, "Connection") == 0 ||
+      strcmp(key, "Keep-Alive") == 0 || strcmp(key, "Accept") == 0 ||
+      strcmp(key, "Cache-Control") == 0 ||
+      strcmp(key, "Accept-Encoding") == 0 || strcmp(key, "Host") == 0) {
     DEBUG_PRINTF("[SSE] Header %s is not allowed\n", key);
     return;
   }
 
   if (!_contains(_customHeaders, key)) {
-    strncpy(_customHeaders[_customHeaderCount].key,   key, MAX_HEADER_KEY_SIZE - 1);
-    strncpy(_customHeaders[_customHeaderCount].value, val, MAX_HEADER_VAL_SIZE - 1);
+    strncpy(_customHeaders[_customHeaderCount].key, key, MAX_HEADER_KEY_SIZE - 1);
+    _customHeaders[_customHeaderCount].key[MAX_HEADER_KEY_SIZE - 1] = '\0';
+
+    std::visit([&](auto &&arg) {
+      using T = std::decay_t<decltype(arg)>;
+      if constexpr (std::is_same_v<T, std::string>) {
+        strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(), MAX_HEADER_VALUE_SIZE - 1);
+        _customHeaders[_customHeaderCount].value[MAX_HEADER_VALUE_SIZE - 1] = '\0';
+      } else if constexpr (std::is_same_v<T, int>) {
+        snprintf(_customHeaders[_customHeaderCount].value, MAX_HEADER_VALUE_SIZE, "%d", arg);
+      } else if constexpr (std::is_same_v<T, float>) {
+        snprintf(_customHeaders[_customHeaderCount].value, MAX_HEADER_VALUE_SIZE, "%f", arg);
+      }
+    }, value);
+
     _customHeaderCount++;
   }
 }
+
 
 // ---------- static callbacks ----------
 

@@ -43,9 +43,6 @@
 
 using namespace std;
 
-typedef std::function<void(std::string_view, std::string_view)> ResponseCallback;
-typedef std::map<std::string, std::string> HeadersMap;
-
 #define MAX_SSE_KEY_SIZE 64
 #define MAX_SSE_VALUE_SIZE 1024
 #define TO_STRING(x) #x
@@ -99,6 +96,9 @@ static char *strnstr(const char *haystack, const char *needle, size_t len);
 class EventSource {
 
 public:
+  using CustomHeaderValue = std::variant<std::string, int, float>;
+  typedef std::map<std::string, CustomHeaderValue> HeadersMap;
+
   enum : uint8_t { CONNECTING = 0, OPEN = 1, CLOSED = 2 };
 
   struct Event {
@@ -177,9 +177,9 @@ private:
     Value value;
   };
 
-  using Header           = KeyValuePair<MAX_HEADER_KEY_SIZE, char[MAX_HEADER_VAL_SIZE]>;
+  using Header = KeyValuePair<MAX_HEADER_KEY_SIZE, char[MAX_HEADER_VALUE_SIZE]>;
   using EventHandlerEntry = KeyValuePair<MAX_EVENT_TYPE_SIZE, EventHandler>;
-
+  
   AsyncClient *_client;
 
   Header           _customHeaders[MAX_HEADER_COUNT];
@@ -221,7 +221,7 @@ private:
   void _onError     (AsyncClient *client, uint8_t error);
   void _onError     (AsyncClient *client, uint8_t code, const char *error);
 
-  void _addHeader(const char *key, const char *val, size_t key_len, size_t value_len);
+  void _addHeader(const char *key, size_t key_len, const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();
   void _disconnect();
@@ -245,9 +245,9 @@ private:
 
 // ---------- template implementations (must stay in header) ----------
 
-template<size_t N, size_t M>
+template <size_t N, size_t M>
 void EventSource::addHeader(char (&key)[N], char (&val)[M]) {
-  _addHeader(key, val, N, M);
+  _addHeader(key, N - 1, CustomHeaderValue{std::string(val, M - 1)});
 }
 
 template<size_t N, typename T>
