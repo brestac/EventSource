@@ -31,3 +31,7 @@ node_modules/
 
 #Passwords
 credentials.h
+
+#stubs
+ESPAsyncTCP.h
+Ticker.h

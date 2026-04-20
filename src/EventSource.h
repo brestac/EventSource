@@ -37,7 +37,7 @@
 #include <map>
 #include <stdint.h>
 #include <string>
-#include <string_view>
+#include <variant>
 
 #include "ESPAsyncTCP.h"
 
@@ -68,27 +68,27 @@ constexpr const char *DEFAULT_HEADERS =
 
 constexpr size_t MAX_HEADER_COUNT      = 8;
 constexpr size_t MAX_HEADER_KEY_SIZE   = 64;
-constexpr size_t MAX_HEADER_VAL_SIZE   = 128;
+constexpr size_t MAX_HEADER_VALUE_SIZE   = 128;
 constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10;
 
 // ---------- free-function declarations ----------
 
-static size_t get_line_size(const char *cstr, size_t max_len);
-static bool isdigits(const char *str);
-static void _isResponseValidEventStream(const char *data, size_t len, bool &contentTypeOk, int &statusCode);
+inline size_t get_line_size(const char *cstr, size_t max_len);
+inline bool isdigits(const char *str);
+inline void _isResponseValidEventStream(const char *data, size_t len, bool &contentTypeOk, int &statusCode);
 static constexpr bool validate_event_type(const char *str);
 
 #ifndef ARDUINO
-static uint64_t millis();
-static void yield() {}
+inline uint64_t millis();
+inline void yield() {}
 #endif
 
 #ifndef HAVE_STRNCHR
-static const char *strnchr(const char *str, char c, size_t max_len);
+inline const char *strnchr(const char *str, char c, size_t max_len);
 #endif
 
 #ifndef ARDUINO
-static char *strnstr(const char *haystack, const char *needle, size_t len);
+inline char *strnstr(const char *haystack, const char *needle, size_t len);
 #endif
 
 // ---------- EventSource class ----------
@@ -259,7 +259,7 @@ bool EventSource::_contains(const T (&array)[N], const char *key) {
   return false;
 }
 
-// ---------- free-function definitions (static, header-only) ----------
+// ---------- free-function definitions (inline, header-only) ----------
 
 static constexpr bool validate_event_type(const char *str) {
   if (str == nullptr || strlen(str) == 0)
@@ -272,7 +272,7 @@ static constexpr bool validate_event_type(const char *str) {
   return true;
 }
 
-static size_t get_line_size(const char *cstr, size_t max_len) {
+inline size_t get_line_size(const char *cstr, size_t max_len) {
   size_t pos = 0;
   while (pos < max_len) {
     if (cstr[pos] == '\r' || cstr[pos] == '\n')
@@ -282,7 +282,7 @@ static size_t get_line_size(const char *cstr, size_t max_len) {
   return pos;
 }
 
-static bool isdigits(const char *str) {
+inline bool isdigits(const char *str) {
   while (*str) {
     if (!isdigit(*str))
       return false;
@@ -292,7 +292,7 @@ static bool isdigits(const char *str) {
 }
 
 #ifndef HAVE_STRNCHR
-static const char *strnchr(const char *s, char c, size_t n) {
+inline const char *strnchr(const char *s, char c, size_t n) {
   for (size_t i = 0; i < n && s[i] != '\0'; ++i) {
     if (static_cast<unsigned char>(s[i]) == static_cast<unsigned char>(c))
       return s + i;
@@ -302,7 +302,7 @@ static const char *strnchr(const char *s, char c, size_t n) {
 #endif
 
 #ifndef ARDUINO
-static char *strnstr(const char *haystack, const char *needle, size_t len) {
+inline char *strnstr(const char *haystack, const char *needle, size_t len) {
   size_t needle_len = strlen(needle);
   if (needle_len == 0)
     return (char *)haystack;
@@ -315,14 +315,14 @@ static char *strnstr(const char *haystack, const char *needle, size_t len) {
   return nullptr;
 }
 
-static uint64_t millis() {
+inline uint64_t millis() {
   static auto start = std::chrono::high_resolution_clock::now();
   auto now = std::chrono::high_resolution_clock::now();
   return std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
 }
 #endif
 
-static void _isResponseValidEventStream(const char *data, size_t len,
+inline void _isResponseValidEventStream(const char *data, size_t len,
                                         bool &contentTypeOk, int &statusCode) {
   const char *statusCodePtr = strnstr(data, "HTTP/1.1 ", len);
   if (statusCodePtr == nullptr) {

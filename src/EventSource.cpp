@@ -98,8 +98,7 @@ void EventSource::_init(const char *host, const char *path, uint16_t port, Optio
 
   _customHeaderCount = 0;
   for (const auto &header : options.headers) {
-    _addHeader(header.first.c_str(), header.second.c_str(),
-               header.first.length(), header.second.length());
+    _addHeader(header.first.c_str(), header.first.length(), header.second);
   }
 }
 
