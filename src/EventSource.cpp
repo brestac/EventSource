@@ -19,37 +19,39 @@ void EventSource::Event::print() {
 
 // ---------- EventSource public ----------
 
-EventSource::Options EventSource::defaultOptions() {
-  Options options;
-  options.autoReconnect = true;
-  options.retryDelay    = DEFAULT_RETRY_DELAY;
-  options.timeout       = DEFAULT_TIMEOUT;
-  return options;
-}
-
-EventSource::EventSource(const char *url, HeadersMap headers) {
-  Options options  = defaultOptions();
-  options.headers  = std::move(headers);
+EventSource::EventSource(const char *url, const Options& options) {
   _init(url, options);
 }
 
-EventSource::EventSource(const char *url, Options options) {
-  _init(url, options);
+EventSource::EventSource(const char *url, const HeadersMap& headers) {
+  _init(url, headers);
 }
 
-EventSource::EventSource(const char *host, const char *path, uint16_t port, HeadersMap headers) {
-  Options options  = defaultOptions();
-  options.headers  = std::move(headers);
-  _init(host, path, port, options);
+EventSource::EventSource(const char *host, const char *path, uint16_t port, const Options& options) {
+  _init(host, path, port, options, options.secure);
 }
 
-EventSource::EventSource(const char *host, const char *path, uint16_t port, Options options) {
-  _init(host, path, port, options);
+EventSource::EventSource(const char *host, const char *path, uint16_t port, const HeadersMap& headers) {
+  _init(host, path, port, headers, false);
+}
+
+EventSource::EventSource(const IPAddress& ip, const char *path, uint16_t port, const Options& options) {
+  _init(ip, path, port, options, options.secure);
+}
+
+EventSource::EventSource(const IPAddress& ip, const char *path, uint16_t port, const HeadersMap& headers) {
+  _init(ip, path, port, headers, false);
+}
+
+EventSource::~EventSource() {
+  _disconnect();
+  delete _client;
 }
 
 // ---------- EventSource private: init ----------
 
-void EventSource::_init(const char *url, Options &options) {
+template<typename Opts>
+void EventSource::_init(const char *url, Opts options) {
   char     host[MAX_EVENT_ORIGIN_SIZE] = { 0 };
   char     path[MAX_SSE_PATH_SIZE]     = { 0 };
   uint16_t port                        = DEFAULT_PORT;
@@ -68,21 +70,41 @@ void EventSource::_init(const char *url, Options &options) {
     }
   }
 
-  _init(host, path, port, options);
+  bool secure = strncmp(url, "https://", 8) == 0;
+
+  _init(host, path, port, options, secure);
 }
 
-void EventSource::_init(const char *host, const char *path, uint16_t port, Options &options) {
-  strncpy(_apiHost, host, sizeof(_apiHost));
+template<typename Host, typename Opts>
+void EventSource::_init(Host host, const char *path, uint16_t port, const Opts &options, bool secure) {
+  if constexpr (std::is_same_v<Host, const char *>) {
+    strncpy(_apiHost, host, sizeof(_apiHost));
+  } else if constexpr (std::is_same_v<std::remove_reference<std::remove_cv<Host>>, IPAddress>) {
+    strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+  }
+   _apiHost[sizeof(_apiHost) - 1] = '\0';
+
+  _customHeaderCount = 0;
+
+  if constexpr (std::is_same_v<Opts, Options>) {
+    _addHeaders(options.headers);
+  } else if constexpr (std::is_same_v<Opts, HeadersMap>) {
+    _addHeaders(options);
+  } else {
+    DEBUG_PRINTLN("Invalid options type");
+  }
+  
   _apiHost[sizeof(_apiHost) - 1] = '\0';
 
   snprintf(_ssePath, sizeof(_ssePath), "/%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
+  _sseAutoreconnect     = true;
+  _retryDelay           = DEFAULT_RETRY_DELAY;
   _client               = new AsyncClient;
+  _secure               = secure;
   _apiPort              = port;
   _readyState           = CLOSED;
-  _sseAutoreconnect     = options.autoReconnect;
-  _retryDelay           = options.retryDelay;
   _retryDelayMultiplier = 1;
   _retryCount           = 0;
   _lastEventId[0]       = '\0';
@@ -90,20 +112,20 @@ void EventSource::_init(const char *host, const char *path, uint16_t port, Optio
   _lastConnectionTime   = 0;
   _dispachQueueSize     = 0;
   _lock_queue           = false;
+  _eventHandlerCount    = 0;
 
-  _client->setRxTimeout(options.retryDelay - 100);
-  _client->setAckTimeout(options.retryDelay - 100);
-
+  _client->setRxTimeout(DEFAULT_TIMEOUT);
+  
   DEBUG_PRINTF(
     "[SSE] EventSource url parsed %s:%hu%s retry:%u autoreconnect: %d\n",
-    _apiHost, _apiPort, _ssePath, _retryDelay, _sseAutoreconnect);
+    _apiHost, _apiPort, _ssePath, _retryDelay, _sseAutoreconnect);  
+}
 
-  _customHeaderCount = 0;
-  for (const auto &header : options.headers) {
+void EventSource::_addHeaders(const HeadersMap& headers) {
+  for (const auto &header : headers) {
     _addHeader(header.first.c_str(), header.first.length(), header.second);
   }
 }
-
 // ---------- update (main loop) ----------
 
 void EventSource::update() {
@@ -363,7 +385,11 @@ void EventSource::_connect_client() {
   }
 
   _readyState = CONNECTING;
+#if ASYNC_TCP_SSL_ENABLED
+  _client->connect(_apiHost, _apiPort, _secure);
+#else 
   _client->connect(_apiHost, _apiPort);
+#endif
 }
 
 bool EventSource::_connected_client() {
@@ -400,6 +426,9 @@ void EventSource::_sendRequest(AsyncClient *client) {
 void EventSource::addEventListener(const char *type, const EventHandler &handler) {
   if (handler == nullptr || !validate_event_type(type)) {
     DEBUG_PRINTLN("[SSE] Gestionnaire ou type invalide");
+#ifdef __EXCEPTIONS
+    throw std::runtime_error("[SyntaxError] Invalid handler or event type");
+#endif
     return;
   }
 
@@ -430,11 +459,15 @@ void EventSource::setAutoreconnect(bool autoreconnect) {
   _sseAutoreconnect = autoreconnect;
 }
 
-void EventSource::_setRetryDelay(uint32_t retryDelay) {
+void EventSource::setRetryDelay(uint32_t retryDelay) {
   if (retryDelay != _retryDelay) {
     _retryDelay = retryDelay;
     DEBUG_PRINTF("[SSE] Retry delay updated to: %u\n", _retryDelay);
   }
+}
+
+void EventSource::setTimeout(uint32_t timeout) {
+  _client->setRxTimeout(timeout);
 }
 
 void EventSource::_setLastEventId(const char *lastEventId) {
@@ -529,8 +562,8 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
 
   const char *colon_pos = strnchr(cstr, ':', len);
   if (colon_pos != nullptr) {
-    char field[MAX_SSE_KEY_SIZE];
-    char value[MAX_SSE_VALUE_SIZE];
+    char field[MAX_EVENT_NAME_SIZE];
+    char value[MAX_EVENT_VALUE_SIZE];
 
     strncpy(field, cstr, colon_pos - cstr);
     field[colon_pos - cstr] = '\0';
@@ -539,8 +572,8 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
     if (*value_start == ' ') value_start++;
 
     size_t value_len = len - (value_start - cstr);
-    if (value_len >= MAX_SSE_VALUE_SIZE)
-      value_len = MAX_SSE_VALUE_SIZE - 1;
+    if (value_len >= MAX_EVENT_VALUE_SIZE)
+      value_len = MAX_EVENT_VALUE_SIZE - 1;
 
     strncpy(value, value_start, value_len);
     value[value_len] = '\0';
@@ -580,7 +613,7 @@ void EventSource::_process_field(const char *name, const char *value, Event &eve
     if (isdigits(value) && strlen(value) > 0 && strlen(value) < 10) {
       long retry = strtol(value, nullptr, 10);
       if (retry > 0 && (unsigned long)retry <= UINT32_MAX)
-        _setRetryDelay(static_cast<uint32_t>(retry));
+        _retryDelay = (uint32_t)retry;
     }
 
   } else {

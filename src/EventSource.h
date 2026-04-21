@@ -40,36 +40,35 @@
 #include <variant>
 
 #include "ESPAsyncTCP.h"
+#include "IPAddress.h"
 
 using namespace std;
 
-#define MAX_SSE_KEY_SIZE 64
-#define MAX_SSE_VALUE_SIZE 1024
-#define TO_STRING(x) #x
+constexpr size_t MAX_EVENT_NAME_SIZE = 64U;
+constexpr size_t MAX_EVENT_VALUE_SIZE = 1024U;
+constexpr size_t MAX_EVENT_DATA_SIZE    = 1024U;
+constexpr size_t MAX_EVENT_ERROR_SIZE   = 256U;
+constexpr size_t MAX_EVENT_TYPE_SIZE    = 32U;
+constexpr size_t MAX_EVENT_ORIGIN_SIZE  = 128U;
+constexpr size_t MAX_EVENT_HANDLER_COUNT = 8U;
+constexpr size_t MAX_EVENT_LINES        = 20U;
 
-constexpr size_t MAX_EVENT_DATA_SIZE    = 1024;
-constexpr size_t MAX_EVENT_ERROR_SIZE   = 256;
-constexpr size_t MAX_EVENT_TYPE_SIZE    = 32;
-constexpr size_t MAX_EVENT_ORIGIN_SIZE  = 128;
-constexpr size_t MAX_EVENT_HANDLER_COUNT = 8;
-constexpr size_t MAX_EVENT_LINES        = 20;
-
-constexpr size_t   MAX_SSE_REQUEST_SIZE   = 1024;
-constexpr size_t   MAX_SSE_PATH_SIZE      = 128;
+constexpr size_t   MAX_SSE_REQUEST_SIZE   = 1024U;
+constexpr size_t   MAX_SSE_PATH_SIZE      = 128U;
 constexpr uint32_t DEFAULT_RETRY_DELAY    = 3000U;
-constexpr size_t   EXPONENTIAL_RETRY_LIMIT = 10;
-constexpr uint16_t DEFAULT_PORT           = 80;
-constexpr uint32_t DEFAULT_TIMEOUT        = 5000U;
+constexpr size_t   EXPONENTIAL_RETRY_LIMIT = 10U;
+constexpr uint16_t DEFAULT_PORT           = 80U;
+constexpr uint32_t DEFAULT_TIMEOUT        = 20U;
 constexpr const char *DEFAULT_HEADERS =
   "Accept: text/event-stream\r\n"
   "Connection: keep-alive\r\n"
   "Cache-Control: no-cache\r\n"
   "Accept-Encoding: identity\r\n";
 
-constexpr size_t MAX_HEADER_COUNT      = 8;
-constexpr size_t MAX_HEADER_KEY_SIZE   = 64;
-constexpr size_t MAX_HEADER_VALUE_SIZE   = 128;
-constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10;
+constexpr size_t MAX_HEADER_COUNT      = 8U;
+constexpr size_t MAX_HEADER_KEY_SIZE   = 64U;
+constexpr size_t MAX_HEADER_VALUE_SIZE   = 128U;
+constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
 
 // ---------- free-function declarations ----------
 
@@ -137,25 +136,28 @@ public:
   };
 
   struct Options {
-    bool     autoReconnect;
-    uint32_t retryDelay;
-    uint32_t timeout;
+    bool       secure;
     HeadersMap headers;
   };
 
   typedef std::function<void(Event &)> EventHandler;
 
-  Options defaultOptions();
+  EventSource(const char *url, const Options &options);
+  EventSource(const char *host, const char *path, uint16_t port, const Options &options);
+  EventSource(const IPAddress &host, const char *path, uint16_t port, const Options &options);
 
-  EventSource(const char *url, HeadersMap headers = {});
-  EventSource(const char *url, Options options = Options());
-  EventSource(const char *host, const char *path, uint16_t port, HeadersMap headers = {});
-  EventSource(const char *host, const char *path, uint16_t port, Options options = Options());
-
+  EventSource(const char *url, const HeadersMap &headers = HeadersMap());
+  EventSource(const char *host, const char *path, uint16_t port, const HeadersMap &headers = HeadersMap());
+  EventSource(const IPAddress &host, const char *path, uint16_t port, const HeadersMap &headers = HeadersMap());
+  
+  ~EventSource();
+  
   void addEventListener(const char *type, const EventHandler &handler);
   void close();
   template<size_t N, size_t M> void addHeader(char (&key)[N], char (&val)[M]);
   void setAutoreconnect(bool autoreconnect);
+  void setRetryDelay(uint32_t retryDelay);
+  void setTimeout(uint32_t timeout);
   void update();
 
   const char *host()  const { return _apiHost; }
@@ -194,8 +196,9 @@ private:
   char    _apiHost[MAX_EVENT_ORIGIN_SIZE];
 
   uint16_t         _apiPort;
+  bool             _secure;
   bool             _sseAutoreconnect;
-  volatile uint32_t _retryDelay;
+  uint32_t         _retryDelay;
   uint8_t          _readyState;
   bool             _initial_connection;
   uint64_t         _lastConnectionTime;
@@ -212,8 +215,10 @@ private:
   static void _onTimeoutStatic   (void *arg, AsyncClient *client, uint32_t time);
 
   // Internal helpers
-  void _init(const char *url,  Options &options);
-  void _init(const char *host, const char *path, uint16_t port, Options &options);
+  template<typename Opts>
+  void _init(const char *url, Opts options);
+  template<typename Host, typename Opts>
+  void _init(Host host, const char *path, uint16_t port, const Opts &options, bool secure = false);
 
   void _onConnect   (AsyncClient *client);
   void _onDisconnect(AsyncClient *client);
@@ -221,6 +226,7 @@ private:
   void _onError     (AsyncClient *client, uint8_t error);
   void _onError     (AsyncClient *client, uint8_t code, const char *error);
 
+  void _addHeaders(const HeadersMap& headers);
   void _addHeader(const char *key, size_t key_len, const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();

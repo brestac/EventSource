@@ -7,11 +7,11 @@ The public API mirrors the [W3C EventSource interface](https://developer.mozilla
 ---
 
 ## Features
-
+- Conforms to the [SSE (Server-Sent Events)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) specification
 - Auto-reconnect with configurable delay
 - Custom HTTP headers
 - `Last-Event-ID` resumption
-- Multiple event-type handlers (`message`, `open`, `close`, `error`, …)
+- Multiple event-type handlers (`message`, `open`, `close`, `error`, `custom_event`)
 - Non-blocking — runs entirely on ESPAsyncTCP callbacks
 
 ---
@@ -37,7 +37,7 @@ Download the ZIP, then in the Arduino IDE: *Sketch → Include Library → Add .
 #include <ESP8266WiFi.h>
 #include "EventSource.h"
 
-EventSource events("http://192.168.1.2:4001/events", {{"X-Device", "esp8266"}});
+EventSource events("http://192.168.1.2:4001/events", {{"X-Device-Id", ESP.chipId()}, {"User-Agent":"ESP8266/1.0"}});
 
 void setup() {
     // … connect to Wi-Fi …
@@ -68,29 +68,31 @@ void loop() {
 ### Constructor
 
 ```cpp
-EventSource(const char *url, Options options = Options());
+EventSource(const char *url);
+EventSource(const char *url, Options options);
 EventSource(const char *url, HeadersMap headers);
+EventSource(const char * host, const char *path, uint_16_t port, Options options = Options());
+EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Options());
 ```
 
 ### Options
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `autoReconnect` | `bool` | `true` | Reconnect automatically after disconnection |
-| `retryDelay` | `uint32_t` | `3000` | Delay before reconnect (ms) |
-| `timeout` | `uint32_t` | `5000` | RX / ACK timeout (ms) |
+| `secure` | `bool` | `false` | Use ssl |
 | `headers` | `HeadersMap` | `{}` | Extra HTTP request headers |
 
 ### Methods
 
-| Method | Description |
-|--------|-------------|
-| `addEventListener(type, handler)` | Register a callback for an event type |
-| `addHeader(name, value)` | Add a custom HTTP header |
-| `setAutoreconnect(bool)` | Enable / disable auto-reconnect |
-| `setRetryDelay(ms)` | Change reconnect delay at runtime |
-| `close()` | Close the connection (disables auto-reconnect) |
-| `readyState()` | Returns `CONNECTING`, `OPEN` or `CLOSED` |
+| Method | Description | Default |
+|--------|-------------|---------|
+| `addEventListener(type, handler)` | Register a callback for an event type | - |
+| `addHeader(name, value)` | Add a custom HTTP header | - |
+| `setAutoreconnect(bool)` | Enable / disable auto-reconnect | true |
+| `setRetryDelay(ms)` | Change reconnect delay at runtime. Maybe overriden by sse retry field | 3000ms |
+| `setTimeout(bool)` | The timeout for the connection | 20s |
+| `close()` | Close the connection (disables auto-reconnect) | - |
+| `readyState()` | Returns `CONNECTING`, `OPEN` or `CLOSED` | - |
 
 ### Event structure
 

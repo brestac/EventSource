@@ -1,26 +1,3 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
 
 # Node
 node_modules/
@@ -33,8 +10,9 @@ node_modules/
 credentials.h
 
 #stubs
-ESPAsyncTCP.h
-Ticker.h
+src/ESPAsyncTCP.h
+src/Ticker.h
+src/IPAddress.h
 
 examples/BasicEventSource/EventSource.h
 examples/BasicEventSource/EventSource.cpp
