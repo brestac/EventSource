@@ -95,7 +95,7 @@ inline char *strnstr(const char *haystack, const char *needle, size_t len);
 class EventSource {
 
 public:
-  using CustomHeaderValue = std::variant<std::string, int, float>;
+  using CustomHeaderValue = std::variant<std::string, int, uint32_t, float, double>;
   typedef std::map<std::string, CustomHeaderValue> HeadersMap;
 
   enum : uint8_t { CONNECTING = 0, OPEN = 1, CLOSED = 2 };

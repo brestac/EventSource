@@ -37,7 +37,7 @@ Download the ZIP, then in the Arduino IDE: *Sketch → Include Library → Add .
 #include <ESP8266WiFi.h>
 #include "EventSource.h"
 
-EventSource events("http://192.168.1.2:4001/events", {{"X-Device-Id", ESP.chipId()}, {"User-Agent":"ESP8266/1.0"}});
+EventSource events("http://192.168.1.2:4001/events", {{"X-Device-Id", ESP.getChipId()}, {"User-Agent":"ESP8266/1.0"}});
 
 void setup() {
     // … connect to Wi-Fi …
@@ -89,7 +89,7 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 | `addEventListener(type, handler)` | Register a callback for an event type | - |
 | `addHeader(name, value)` | Add a custom HTTP header | - |
 | `setAutoreconnect(bool)` | Enable / disable auto-reconnect | true |
-| `setRetryDelay(ms)` | Change reconnect delay at runtime. Maybe overriden by sse retry field | 3000ms |
+| `setRetryDelay(ms)` | Change reconnect delay at runtime. May be overriden by sse retry field | 3000ms |
 | `setTimeout(bool)` | The timeout for the connection | 20s |
 | `close()` | Close the connection (disables auto-reconnect) | - |
 | `readyState()` | Returns `CONNECTING`, `OPEN` or `CLOSED` | - |
