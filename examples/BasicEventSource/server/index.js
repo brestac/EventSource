@@ -5,17 +5,17 @@ import Path from 'path';
 import express from 'express';
 import cors from 'cors';
 
+const SERVER_IP="192.168.1.2";
 const SERVER_PORT=4001;
 //const SERVER_PORT_SSL=5001;
-const SERVER_IP="192.168.1.2";
 const KEEP_ALIVE_TIMEOUT_MS = 30 * 1000;
+
 const app = express();
 
 // const serverOptions = {
 //     key: fs.readFileSync(`./server.key`, 'utf8'),
-//     cert: fs.readFileSync(`./server.crt`, 'utf8'),
-//     // Options SSL/TLS renforcées
-//     secureProtocol: 'TLSv1_2_method'
+//     cert: fs.readFileSync(`./server.cer`, 'utf8'),
+//     // secureProtocol: 'TLSv1_2_method'
 // };
 
 app.use(cors());
@@ -24,8 +24,6 @@ app.use(express.raw({ type: 'application/octet-stream' }));
 
 app.get('/events', async (req, res) => {
 
-    console.log("Source event connection start. Last-Event-ID", req.get('last-event-id') ?? "");
-    // Initialisation du flux pour l'ESP
     req.socket.setNoDelay(true);
     req.socket.setKeepAlive(true);
 
@@ -36,10 +34,10 @@ app.get('/events', async (req, res) => {
     res.statusCode = 200;
 
     req.on('close', () => {
-        console.log('close');
+        console.log('Device is disconnected from SSE server');
     });
 
-    console.log('open');
+    console.log(`Device ${req.get('x-device')} is connected to SSE server. Last event Id was ${req.get('last-event-id') ?? "Unknown"}`);
     setInterval(sendData, 5000, res);
 });
 
@@ -63,7 +61,7 @@ const sendData = (clientRes) => {
 http.createServer(app, {keepAliveTimeout : KEEP_ALIVE_TIMEOUT_MS}).listen(SERVER_PORT, SERVER_IP, () => {
     console.log(`Listening on http://${SERVER_IP}:${SERVER_PORT}`);
 });
-//
+
 // https.createServer({...serverOptions, keepAliveTimeout : KEEP_ALIVE_TIMEOUT_MS}, app).listen(SERVER_PORT_SSL, SERVER_IP, () => {
 //     console.log(`Listening on https://${SERVER_IP}:${SERVER_PORT_SSL}`);
 // });

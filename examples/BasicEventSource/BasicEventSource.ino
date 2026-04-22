@@ -19,7 +19,7 @@
 #define WIFI_PASSWORD "YOUR_PASSWORD"
 
 // Change host and port to match your server setup.
-EventSource source("https://192.168.1.2:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
+EventSource source("http://192.168.1.2:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
 
 void setup() {
 
@@ -40,7 +40,7 @@ void setup() {
   });
 
   source.addEventListener("close", [](EventSource::Event& event) {
-    Serial.printf("Connection closed\n");
+    Serial.printf("Connection closed, retry in %ums\n", source.retryDelay());
   });
 
   source.addEventListener("error", [](EventSource::Event& event) {
@@ -49,17 +49,18 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  uint8_t numberOftry = 0;
-  while (WiFi.status() != WL_CONNECTED && numberOftry < 10) {
-    yield();
-    delay(200);
+  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.printf("WiFi Failed!\n");
+    return;
   }
-
-  Serial.printf("WiFi %s connected\n", WiFi.status() == WL_CONNECTED ? "is" : "is not");
+  Serial.printf("WiFi Connected! IP:");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
-    source.update();
+    if (WiFi.status == WL_CONNECTED) {
+      source.update();
+    }
+
     delay(100);
 }

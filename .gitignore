@@ -2,9 +2,12 @@
 # Node
 node_modules/
 
-#Server
+#Server SSL keys
 *.key
 *.crt
+*cer
+server.conf
+generate_cert.sh
 
 #Passwords
 credentials.h
