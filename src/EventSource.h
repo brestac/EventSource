@@ -25,11 +25,6 @@
 #ifdef ARDUINO
 #include <sys/_stdint.h>
 #include "user_interface.h"
-#if defined(ESP8266)
-  #include <ESP8266WiFi.h>
-#elif defined(ESP32)
-  #include <WiFi.h>
-#endif
 #else
 #include <chrono>
 #endif
@@ -170,6 +165,10 @@ public:
   const char *path()  const { return _ssePath; }
   uint16_t    port()  const { return _apiPort;  }
   uint8_t     readyState()  { return _readyState; }
+  bool        secure() const { return _secure; }
+  bool        autoreconnect() const { return _sseAutoreconnect; }
+  uint32_t    retryDelay() const { return _retryDelay; }
+  uint32_t    timeout() const { return _client->getAckTimeout(); }
 
   const char *url() const {
     static char url[512];

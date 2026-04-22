@@ -164,10 +164,6 @@ void EventSource::update() {
 #endif
   }
 
-#if defined(ARDUINO) && (defined(ESP8266) || defined(ESP32))
-if (WiFi.status() != WL_CONNECTED) return;
-#endif
-
   if (_initial_connection) {
     DEBUG_PRINTLN("[SSE] Initial connection");
     _initial_connection = false;
