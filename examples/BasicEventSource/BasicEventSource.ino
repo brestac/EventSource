@@ -15,18 +15,17 @@
 #include <ESP8266WiFi.h>
 #include <EventSource.h>
 
-#define WIFI_SSID "ssid"
-#define WIFI_PASSWORD "password"
+#define WIFI_SSID "YOUR_SSID"
+#define WIFI_PASSWORD "YOUR_PASSWORD"
 
-EventSource source("https://192.168.1.2:4001/events", {{"X-Device", 123456}, {"User-Agent", "EventSource/1.0"}});
+// Change host and port to match your server setup.
+EventSource source("https://192.168.1.2:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
 
 void setup() {
 
   Serial.begin(115200);
-  delay(500);
+  delay(200);
   Serial.printf("\n\nSETUP\n");
-
-  connectWifi();
 
   source.addEventListener("open", [](EventSource::Event& event) {
     Serial.printf("Connected to server\n");
@@ -47,45 +46,20 @@ void setup() {
   source.addEventListener("error", [](EventSource::Event& event) {
     Serial.printf("Error: %s\n", event.error.message);
   });
-}
 
-void loop() {
-    source.update();
-    delay(100);
-}
-
-void connectWifi() {
-  DEBUG_PRINTLN("Connecting as wifi client...");
-
-  // WIFI
-  uint8_t mac[6] = {170, 0, 0, 0, 0, 11};
   WiFi.mode(WIFI_STA);
-  wifi_set_macaddr(STATION_IF, mac);
-
-  WiFi.onStationModeConnected([](const WiFiEventStationModeConnected &event) {
-    DEBUG_PRINTLN("Station connected");
-  });
-
-  WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event) {
-    DEBUG_PRINTLN("Station disconnected");
-    connectWifi();
-  });
-
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   uint8_t numberOftry = 0;
   while (WiFi.status() != WL_CONNECTED && numberOftry < 10) {
     yield();
-    DEBUG_PRINTF("... WiFi connecting status:%d\n", WiFi.status());
-    delay(500);
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    delay(200);
   }
 
-  if (++numberOftry >= 10) {
-    DEBUG_PRINTF("... WiFi timeout status:%d\n", WiFi.status());
-  } else {
-    DEBUG_PRINTF("WiFi connected status:%d\n", WiFi.status());
-    WiFi.setAutoReconnect(true);
-    WiFi.persistent(true);
-  }
+  Serial.printf("WiFi %s connected\n", WiFi.status() == WL_CONNECTED ? "is" : "is not");
+}
+
+void loop() {
+    source.update();
+    delay(100);
 }

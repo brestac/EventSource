@@ -8,7 +8,7 @@ import cors from 'cors';
 const SERVER_PORT=4001;
 //const SERVER_PORT_SSL=5001;
 const SERVER_IP="192.168.1.2";
-
+const KEEP_ALIVE_TIMEOUT_MS = 30 * 1000;
 const app = express();
 
 // const serverOptions = {

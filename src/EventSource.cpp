@@ -1,8 +1,5 @@
 
 #include "EventSource.h"
-#ifdef ARDUINO
-#include "user_interface.h"
-#endif
 
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -166,6 +163,10 @@ void EventSource::update() {
     system_soft_wdt_feed();
 #endif
   }
+
+#if defined(ARDUINO) && (defined(ESP8266) || defined(ESP32))
+if (WiFi.status() != WL_CONNECTED) return;
+#endif
 
   if (_initial_connection) {
     DEBUG_PRINTLN("[SSE] Initial connection");
