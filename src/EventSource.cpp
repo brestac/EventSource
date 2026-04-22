@@ -4,6 +4,22 @@
 #include "user_interface.h"
 #endif
 
+template <class T>
+using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+
+template <typename T> struct is_char_array : std::false_type {};
+
+template <typename T, size_t N>
+struct is_char_array<T[N]> : std::is_same<remove_cvref_t<T>, char> {};
+
+// template <typename T>
+// inline constexpr bool is_char_array_v = is_char_array<T>::value;
+
+template <typename T>
+constexpr bool is_string_host_v = std::is_same_v<remove_cvref_t<T>, char*> || is_char_array<T>::value;
+template <typename T>
+constexpr bool is_ip_host_v = std::is_same_v<remove_cvref_t<T>, IPAddress>;
+
 // ---------- Event ----------
 EventSource::Event::Event() {
   memset(this, 0, sizeof(Event));
@@ -83,28 +99,32 @@ void EventSource::_init(const char *url, Opts options) {
 template <typename Host, typename Opts>
 void EventSource::_init(Host host, const char *path, uint16_t port,
                         const Opts &options, bool secure) {
-  if constexpr (std::is_same_v<Host, const char *>) {
+  if constexpr (is_string_host_v<Host>) {
     strncpy(_apiHost, host, sizeof(_apiHost));
-  } else if constexpr (std::is_same_v<
-                           std::remove_reference<std::remove_cv<Host>>,
-                           IPAddress>) {
+  } else if constexpr (is_ip_host_v<Host>) {
     strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+  } else {
+    DEBUG_PRINTLN("Invalid host type");
+    _onError(nullptr, 0, "Invalid host type");
+    _sseAutoreconnect = false;
+    return;
   }
   _apiHost[sizeof(_apiHost) - 1] = '\0';
 
   _customHeaderCount = 0;
 
-  if constexpr (std::is_same_v<Opts, Options>) {
+  if constexpr (std::is_same_v<remove_cvref_t<Opts>, Options>) {
     _addHeaders(options.headers);
-  } else if constexpr (std::is_same_v<Opts, HeadersMap>) {
+  } else if constexpr (std::is_same_v<remove_cvref_t<Opts>, HeadersMap>) {
     _addHeaders(options);
   } else {
     DEBUG_PRINTLN("Invalid options type");
+    _onError(nullptr, 0, "Invalid options type");
+    _sseAutoreconnect = false;
+    return;
   }
 
-  _apiHost[sizeof(_apiHost) - 1] = '\0';
-
-  snprintf(_ssePath, sizeof(_ssePath), "/%s", path);
+  snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
   _sseAutoreconnect = true;
@@ -209,8 +229,6 @@ void EventSource::_addHeader(const char *key, size_t key_len,
           if constexpr (std::is_same_v<T, std::string>) {
             strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(),
                     MAX_HEADER_VALUE_SIZE - 1);
-            _customHeaders[_customHeaderCount]
-                .value[MAX_HEADER_VALUE_SIZE - 1] = '\0';
           } else if constexpr (std::is_convertible_v<T, int>) {
             snprintf(_customHeaders[_customHeaderCount].value,
                      MAX_HEADER_VALUE_SIZE, "%d", (int)arg);
@@ -218,6 +236,9 @@ void EventSource::_addHeader(const char *key, size_t key_len,
             snprintf(_customHeaders[_customHeaderCount].value,
                      MAX_HEADER_VALUE_SIZE, "%f", (float)arg);
           }
+
+          _customHeaders[_customHeaderCount].value[MAX_HEADER_VALUE_SIZE - 1] =
+              '\0';
         },
         value);
 
