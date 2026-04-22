@@ -70,6 +70,7 @@ constexpr size_t MAX_HEADER_COUNT      = 8U;
 constexpr size_t MAX_HEADER_KEY_SIZE   = 64U;
 constexpr size_t MAX_HEADER_VALUE_SIZE   = 128U;
 constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
+constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
 
 // ---------- free-function declarations ----------
 
@@ -164,11 +165,12 @@ public:
   const char *host()  const { return _apiHost; }
   const char *path()  const { return _ssePath; }
   uint16_t    port()  const { return _apiPort;  }
+
   uint8_t     readyState()  { return _readyState; }
   bool        secure() const { return _secure; }
   bool        autoreconnect() const { return _sseAutoreconnect; }
   uint32_t    retryDelay() const { return _retryDelay; }
-  uint32_t    timeout() const { return _client->getAckTimeout(); }
+  uint32_t    timeout() const { return _timeout; }
 
   const char *url() const {
     static char url[512];
@@ -211,6 +213,7 @@ private:
   bool             _lock_queue;
   size_t           _retryCount;
   size_t           _retryDelayMultiplier;
+  uint32_t         _timeout;
 
   // Static callbacks
   static void _onConnectStatic   (void *arg, AsyncClient *client);
@@ -236,14 +239,11 @@ private:
   void _sendRequest(AsyncClient *c);
   void _connect();
   void _disconnect();
-  void _connect_client();
-  bool _connected_client();
   void _setLastEventId(const char *lastEventId);
-  void _setRetryDelay(uint32_t retryDelay);
   void _dispachEvent(Event &event);
   void _addToQueue(Event &event);
   void _processQueue();
-  void _queueConnectionEvent(const char *type);
+  void _queueConnectionEvent();
   void _parse_event_stream(const char *cstr, size_t len);
   bool _process_line(const char *cstr, size_t len, Event &event);
   void _process_field(const char *name, const char *value, Event &event);

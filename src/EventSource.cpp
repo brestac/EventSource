@@ -83,7 +83,6 @@ void EventSource::_init(const char *url, Opts options) {
 #ifdef __EXCEPTIONS
       throw std::runtime_error("[SyntaxError] Failed to parse URL");
 #endif
-      _sseAutoreconnect = false;
       return;
     }
   }
@@ -103,7 +102,6 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   } else {
     DEBUG_PRINTLN("Invalid host type");
     _onError(nullptr, 0, "Invalid host type");
-    _sseAutoreconnect = false;
     return;
   }
   _apiHost[sizeof(_apiHost) - 1] = '\0';
@@ -117,19 +115,23 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   } else {
     DEBUG_PRINTLN("Invalid options type");
     _onError(nullptr, 0, "Invalid options type");
-    _sseAutoreconnect = false;
     return;
   }
 
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
+  _client = new AsyncClient;
+  _client->onConnect(_onConnectStatic, this);
+  _client->onDisconnect(_onDisconnectStatic, this);
+  _client->onError(_onErrorStatic, this);
+  _client->onData(_onDataStatic, this);
+  
   _sseAutoreconnect = true;
   _retryDelay = DEFAULT_RETRY_DELAY;
-  _client = new AsyncClient;
   _secure = secure;
   _apiPort = port;
-  _readyState = CLOSED;
+  _readyState = CONNECTING;
   _retryDelayMultiplier = 1;
   _retryCount = 0;
   _lastEventId[0] = '\0';
@@ -138,8 +140,7 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   _dispachQueueSize = 0;
   _lock_queue = false;
   _eventHandlerCount = 0;
-
-  _client->setRxTimeout(DEFAULT_TIMEOUT);
+  _timeout = DEFAULT_TIMEOUT;
 
   DEBUG_PRINTF(
       "[SSE] EventSource url parsed %s:%hu%s retry:%u autoreconnect: %d\n",
@@ -156,42 +157,34 @@ void EventSource::_addHeaders(const HeadersMap &headers) {
 void EventSource::update() {
   static uint64_t lastQueueUpdate = 0;
 
-  if (millis() - lastQueueUpdate > 100) {
-    lastQueueUpdate = millis();
+  if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL ) {
     _processQueue();
+    lastQueueUpdate = millis();
 #ifdef ARDUINO
     system_soft_wdt_feed();
 #endif
   }
 
-  if (_initial_connection) {
-    DEBUG_PRINTLN("[SSE] Initial connection");
-    _initial_connection = false;
-    _connect();
-#ifdef ARDUINO
-    system_soft_wdt_feed();
-#endif
-  } else if (_readyState == CLOSED) {
-    if (_client->connected()) {
-      if ((millis() - _lastConnectionTime) > DEFAULT_TIMEOUT) {
-        DEBUG_PRINTLN("[SSE] Timeout");
-        _onError(_client, 0, "Timeout");
-      }
-    } else if (_sseAutoreconnect && (millis() - _lastConnectionTime) >
-                                        _retryDelay * _retryDelayMultiplier) {
-      DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
-                   millis() - _lastConnectionTime);
-      _lastConnectionTime = millis();
-      _retryCount++;
-      _connect_client();
+  if (_readyState != CONNECTING) return;
 
-      if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
-        _retryCount = 0;
-        _retryDelayMultiplier++;
-        DEBUG_PRINTF("[SSE] Too many reconnection attempts, increasing retry "
+  if (_client->connected()) {
+    if ((millis() - _lastConnectionTime) > _timeout) {
+      DEBUG_PRINTLN("[SSE] Timeout");
+      _client->close();
+    }
+  } else if (_sseAutoreconnect && (millis() - _lastConnectionTime) > _retryDelay * _retryDelayMultiplier) {
+    DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
+                   millis() - _lastConnectionTime);
+    _lastConnectionTime = millis();
+    _retryCount++;
+    _connect();
+
+    if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
+      _retryCount = 0;
+      _retryDelayMultiplier++;
+      DEBUG_PRINTF("[SSE] Too many reconnection attempts, increasing retry "
                      "delay to %zu seconds\n",
                      _retryDelay * _retryDelayMultiplier);
-      }
     }
   }
 }
@@ -265,7 +258,7 @@ void EventSource::_onErrorStatic(void *arg, AsyncClient *client,
 
 void EventSource::_onTimeoutStatic(void *arg, AsyncClient *client,
                                    uint32_t /*time*/) {
-  static_cast<EventSource *>(arg)->_onError(client, 0, "Timeout");
+  DEBUG_PRINTLN("[SSE] Timeout");
 }
 
 // ---------- connection lifecycle ----------
@@ -276,16 +269,9 @@ void EventSource::_onConnect(AsyncClient *client) {
 }
 
 void EventSource::_onDisconnect(AsyncClient *client) {
-  bool disconnected = (_readyState != CLOSED);
-  _readyState = CLOSED;
+  _readyState = CONNECTING;
 
-  DEBUG_PRINTF("onDisconnect _readyState=%hhu disconnected=%d\n", _readyState,
-               disconnected);
-
-  if (disconnected) {
-    DEBUG_PRINTLN("[SSE] Calling user disconnect handler");
-    _queueConnectionEvent("close");
-  }
+  DEBUG_PRINTF("onDisconnect _readyState=%hhu\n", _readyState);
 }
 
 void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
@@ -294,28 +280,28 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
   char *body_start = reinterpret_cast<char *>(data);
   size_t body_len = len;
 
-  if (_readyState != OPEN) {
+  if (_readyState == CONNECTING) {
     bool contentTypeOk = false;
     int statusCode = -1;
     _isResponseValidEventStream((char *)data, len, contentTypeOk, statusCode);
 
-    if (!contentTypeOk || statusCode != 200) {
-      char error[MAX_EVENT_ERROR_SIZE];
-      snprintf(error, sizeof(error),
-               "Invalid response: status code %d, Content-Type header is %s",
-               statusCode, contentTypeOk ? "text/event-stream" : "not found");
-      _onError(client, 0, error);
-      return;
+    if (!contentTypeOk) {
+      _onError(client, 0, "Content-Type: text/event-stream not found");
     }
 
-    DEBUG_PRINTLN("[SSE] Content-Type found");
+    if (statusCode != 200) {
+      _onError(client, statusCode, "HTTP status code not 200");
+    }
+
+    if (!contentTypeOk || statusCode != 200) return;
+
     _readyState = OPEN;
-    DEBUG_PRINTLN("[SSE] Calling user connect handler");
-    _queueConnectionEvent("open");
+    _queueConnectionEvent();
     _retryCount = 0;
     _retryDelayMultiplier = 1;
 
     body_start = strnstr((char *)data, "\r\n\r\n", len);
+  
     if (body_start != nullptr) {
       DEBUG_PRINTLN("[SSE] Body found");
       body_start += 4;
@@ -323,10 +309,9 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
     }
   }
 
-  if (body_start != nullptr && body_len > 0)
+  if (body_start != nullptr && body_len > 0) {
     _parse_event_stream(body_start, body_len);
-
-  DEBUG_PRINTLN("[SSE] onData ended.");
+  }
 }
 
 void EventSource::_onError(AsyncClient *client, uint8_t error) {
@@ -337,6 +322,7 @@ void EventSource::_onError(AsyncClient *client, uint8_t code,
                            const char *error) {
   DEBUG_PRINTF("[SSE] Error: %s\n", error);
   _readyState = CLOSED;
+  _sseAutoreconnect = false;
 
   Event event;
   event.error.code = code;
@@ -345,9 +331,9 @@ void EventSource::_onError(AsyncClient *client, uint8_t code,
   _addToQueue(event);
 }
 
-void EventSource::_queueConnectionEvent(const char *type) {
+void EventSource::_queueConnectionEvent() {
   Event event;
-  strncpy(event.type, type, sizeof(event.type));
+  strncpy(event.type, "open", sizeof(event.type));
   _addToQueue(event);
 }
 
@@ -411,14 +397,6 @@ void EventSource::_processQueue() {
 // ---------- connection ----------
 
 void EventSource::_connect() {
-  _client->onConnect(_onConnectStatic, this);
-  _client->onDisconnect(_onDisconnectStatic, this);
-  _client->onError(_onErrorStatic, this);
-  _client->onData(_onDataStatic, this);
-  _connect_client();
-}
-
-void EventSource::_connect_client() {
   DEBUG_PRINTF("[SSE] Connexion à %s:%hu%s retry:%u\n", _apiHost, _apiPort,
                _ssePath, _retryDelay);
 
@@ -427,15 +405,12 @@ void EventSource::_connect_client() {
     return;
   }
 
-  _readyState = CONNECTING;
 #if ASYNC_TCP_SSL_ENABLED
   _client->connect(_apiHost, _apiPort, _secure);
 #else
   _client->connect(_apiHost, _apiPort);
 #endif
 }
-
-bool EventSource::_connected_client() { return _client->connected(); }
 
 void EventSource::_sendRequest(AsyncClient *client) {
   char reqBuf[MAX_SSE_REQUEST_SIZE];
@@ -493,6 +468,7 @@ void EventSource::_disconnect() { _client->close(); }
 
 void EventSource::close() {
   _sseAutoreconnect = false;
+  _readyState = CLOSED;
   _client->close();
 }
 
@@ -508,7 +484,7 @@ void EventSource::setRetryDelay(uint32_t retryDelay) {
 }
 
 void EventSource::setTimeout(uint32_t timeout) {
-  _client->setRxTimeout(timeout);
+  _timeout = timeout;
 }
 
 void EventSource::_setLastEventId(const char *lastEventId) {
