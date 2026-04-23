@@ -1,10 +1,30 @@
-// Class EventSource
-// A class to handle Server-Sent Events (SSE) from a server
-// Using AsyncTCP library for ESP8266
-// The API reflects the API of the EventSource class in JavaScript
-// https://developer.mozilla.org/en-US/docs/Web/API/EventSource
+/*
+  Class EventSource
+  A class to handle Server-Sent Events (SSE) from a server
+  Using AsyncTCP library for ESP8266
+  The API reflects the API of the EventSource class in JavaScript
+  https://developer.mozilla.org/en-US/docs/Web/API/EventSource
 
+  Copyright (c) 2026 Romain Brestac. All rights reserved.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
 #pragma once
+
+#ifndef EVENTSOURCE_H_
+#define EVENTSOURCE_H_
 
 #if DEBUG_EVENTSOURCE == 1
 #ifdef ARDUINO
@@ -45,32 +65,33 @@
 
 using namespace std;
 
-constexpr size_t MAX_EVENT_NAME_SIZE = 64U;
-constexpr size_t MAX_EVENT_VALUE_SIZE = 1024U;
-constexpr size_t MAX_EVENT_DATA_SIZE    = 1024U;
-constexpr size_t MAX_EVENT_ERROR_SIZE   = 256U;
-constexpr size_t MAX_EVENT_TYPE_SIZE    = 32U;
-constexpr size_t MAX_EVENT_ORIGIN_SIZE  = 128U;
-constexpr size_t MAX_EVENT_HANDLER_COUNT = 8U;
-constexpr size_t MAX_EVENT_LINES        = 20U;
-
-constexpr size_t   MAX_SSE_REQUEST_SIZE   = 1024U;
-constexpr size_t   MAX_SSE_PATH_SIZE      = 128U;
-constexpr uint32_t DEFAULT_RETRY_DELAY    = 3000U;
+constexpr size_t   MAX_SSE_REQUEST_SIZE    = 1024U;
+constexpr size_t   MAX_SSE_PATH_SIZE       = 128U;
+constexpr uint32_t DEFAULT_RETRY_DELAY     = 3000U;
 constexpr size_t   EXPONENTIAL_RETRY_LIMIT = 10U;
-constexpr uint16_t DEFAULT_PORT           = 80U;
-constexpr uint32_t DEFAULT_TIMEOUT        = 20U;
+constexpr uint16_t DEFAULT_PORT            = 80U;
+constexpr uint32_t DEFAULT_TIMEOUT         = 20U;
+constexpr size_t   MAX_EVENT_NAME_SIZE     = 32U;
+
+constexpr size_t MAX_EVENT_VALUE_SIZE    = 1024U;
+constexpr size_t MAX_EVENT_DATA_SIZE     = 1024U;
+constexpr size_t MAX_EVENT_ERROR_SIZE    = 256U;
+constexpr size_t MAX_EVENT_TYPE_SIZE     = 32U;
+constexpr size_t MAX_EVENT_ORIGIN_SIZE   = 128U;
+constexpr size_t MAX_EVENT_HANDLER_COUNT = 8U;
+constexpr size_t MAX_EVENT_LINES         = 20U;
+
+constexpr size_t MAX_HEADER_COUNT          = 8U;
+constexpr size_t MAX_HEADER_KEY_SIZE       = 64U;
+constexpr size_t MAX_HEADER_VALUE_SIZE     = 128U;
+
+constexpr size_t MAX_DISPACH_QUEUE_SIZE      = 10U;
+constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
 constexpr const char *DEFAULT_HEADERS =
   "Accept: text/event-stream\r\n"
   "Connection: keep-alive\r\n"
   "Cache-Control: no-cache\r\n"
   "Accept-Encoding: identity\r\n";
-
-constexpr size_t MAX_HEADER_COUNT      = 8U;
-constexpr size_t MAX_HEADER_KEY_SIZE   = 64U;
-constexpr size_t MAX_HEADER_VALUE_SIZE   = 128U;
-constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
-constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
 
 // ---------- free-function declarations ----------
 
@@ -97,6 +118,7 @@ inline char *strnstr(const char *haystack, const char *needle, size_t len);
 class EventSource {
 
 public:
+
   using CustomHeaderValue = std::variant<std::string, int, uint32_t, float, double>;
   typedef std::map<std::string, CustomHeaderValue> HeadersMap;
 
@@ -106,25 +128,14 @@ public:
   public:
     char type[MAX_EVENT_TYPE_SIZE]     = { 0 };
     char origin[MAX_EVENT_ORIGIN_SIZE] = { 0 };
+    
+    char data[MAX_EVENT_DATA_SIZE];
+    char lastEventId[128];
 
-    union {
-      struct {
-        char data[MAX_EVENT_DATA_SIZE];
-        char lastEventId[128];
-      } message;
-
-      struct {
-        char message[MAX_EVENT_ERROR_SIZE];
-        int  code;
-      } error;
-    };
+    char message[MAX_EVENT_ERROR_SIZE];
+    int  code;
 
     void print();
-
-    const char *data()        const { return message.data; }
-    const char *lastEventId() const { return message.lastEventId; }
-    const char *err()         const { return error.message; }
-    int         code()        const { return error.code; }
 
     Event();
     Event(const Event &)            = default;
@@ -160,8 +171,9 @@ public:
   void setAutoreconnect(bool autoreconnect);
   void setRetryDelay(uint32_t retryDelay);
   void setTimeout(uint32_t timeout);
+// #ifndef ESP32
   void update();
-
+// #endif
   const char *host()  const { return _apiHost; }
   const char *path()  const { return _ssePath; }
   uint16_t    port()  const { return _apiPort;  }
@@ -241,6 +253,7 @@ private:
   void _disconnect();
   void _setLastEventId(const char *lastEventId);
   void _dispachEvent(Event &event);
+  void _update();
   void _addToQueue(Event &event);
   void _processQueue();
   void _queueConnectionEvent();
@@ -248,7 +261,6 @@ private:
   bool _process_line(const char *cstr, size_t len, Event &event);
   void _process_field(const char *name, const char *value, Event &event);
   Event _newMessageEvent();
-  Event _get_current_event(Event &event);
 
   template<size_t N, typename T>
   bool _contains(const T (&array)[N], const char *key);

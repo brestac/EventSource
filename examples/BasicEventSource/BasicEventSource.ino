@@ -32,19 +32,15 @@ void setup() {
   });
 
   source.addEventListener("message", [](EventSource::Event& event) {
-    Serial.printf("Received message: %s\n", event.message.data);
+    Serial.printf("Received message: %s\n", event.data);
   });
 
   source.addEventListener("myevent", [](EventSource::Event& event) {
-    Serial.printf("Received myevent message: %s\n", event.message.data);
-  });
-
-  source.addEventListener("close", [](EventSource::Event& event) {
-    Serial.printf("Connection closed, retry in %ums\n", source.retryDelay());
+    Serial.printf("Received myevent message: %s\n", event.data);
   });
 
   source.addEventListener("error", [](EventSource::Event& event) {
-    Serial.printf("Error: %s\n", event.error.message);
+    Serial.printf("Error %d: %s\n", event.code, event.message);
   });
 
   WiFi.mode(WIFI_STA);

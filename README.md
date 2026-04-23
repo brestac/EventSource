@@ -47,11 +47,11 @@ void setup() {
     });
 
     events.addEventListener("message", [](EventSource::Event &event) {
-        Serial.println(event.message.data);
+        Serial.println(event.data);
     });
 
     events.addEventListener("error", [](EventSource::Event &event) {
-        Serial.printf("Error %d: %s\n", event.error.code, event.error.message);
+        Serial.printf("Error %d: %s\n", event.code, event.message);
     });
 }
 

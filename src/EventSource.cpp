@@ -1,6 +1,9 @@
 
 #include "EventSource.h"
-
+// #ifdef ESP32
+// #include <freertos/FreeRTOS.h>
+// #include <freertos/task.h>
+// #endif
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
@@ -95,6 +98,7 @@ void EventSource::_init(const char *url, Opts options) {
 template <typename Host, typename Opts>
 void EventSource::_init(Host host, const char *path, uint16_t port,
                         const Opts &options, bool secure) {
+  
   if constexpr (is_string_host_v<Host>) {
     strncpy(_apiHost, host, sizeof(_apiHost));
   } else if constexpr (is_ip_host_v<Host>) {
@@ -142,8 +146,20 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   _eventHandlerCount = 0;
   _timeout = DEFAULT_TIMEOUT;
 
+// #ifdef ESP32
+//   // Start a vTask containing update() function
+//   xTaskCreate([](void *arg) {
+//     EventSource *source = static_cast<EventSource *>(arg);
+//     while (true) {
+//        std::printf("[SSE] EventSourceTask running\n");
+//       source->_update();
+//       vTaskDelay(10 / portTICK_PERIOD_MS);
+//     }
+//   }, "EventSourceTask", 4096, this, 1, nullptr);
+// #endif
+
   DEBUG_PRINTF(
-      "[SSE] EventSource url parsed %s:%hu%s retry:%u autoreconnect: %d\n",
+      "[SSE] EventSource url init %s:%hu%s retry:%u autoreconnect: %d\n",
       _apiHost, _apiPort, _ssePath, _retryDelay, _sseAutoreconnect);
 }
 
@@ -153,8 +169,13 @@ void EventSource::_addHeaders(const HeadersMap &headers) {
   }
 }
 // ---------- update (main loop) ----------
-
+// #ifndef ESP32
 void EventSource::update() {
+  _update();
+}
+// #endif
+
+void EventSource::_update() {
   static uint64_t lastQueueUpdate = 0;
 
   if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL ) {
@@ -325,9 +346,9 @@ void EventSource::_onError(AsyncClient *client, uint8_t code,
   _sseAutoreconnect = false;
 
   Event event;
-  event.error.code = code;
+  event.code = code;
   strncpy(event.type, "error", sizeof(event.type));
-  strncpy(event.error.message, error, sizeof(event.error.message));
+  strncpy(event.message, error, sizeof(event.message));
   _addToQueue(event);
 }
 
@@ -341,9 +362,9 @@ void EventSource::_queueConnectionEvent() {
 
 void EventSource::_dispachEvent(Event &event) {
   // Strip trailing newline from data
-  size_t dlen = strlen(event.message.data);
-  if (dlen > 0 && event.message.data[dlen - 1] == '\n')
-    event.message.data[dlen - 1] = '\0';
+  size_t dlen = strlen(event.data);
+  if (dlen > 0 && event.data[dlen - 1] == '\n')
+    event.data[dlen - 1] = '\0';
 
   for (uint8_t i = 0; i < _eventHandlerCount; i++) {
     if (strcmp(_eventHandlers[i].key, event.type) == 0 &&
@@ -510,12 +531,6 @@ EventSource::Event EventSource::_newMessageEvent() {
   return event;
 }
 
-EventSource::Event EventSource::_get_current_event(Event &event) {
-  if (event._queued)
-    return _newMessageEvent();
-  return event;
-}
-
 void EventSource::_parse_event_stream(const char *cstr, size_t len) {
   if (len == 0)
     return;
@@ -608,10 +623,10 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
 void EventSource::_process_field(const char *name, const char *value,
                                  Event &event) {
   if (strcmp(name, "data") == 0) {
-    strncat(event.message.data, value,
-            sizeof(event.message.data) - strlen(event.message.data) - 1);
-    strncat(event.message.data, "\n",
-            sizeof(event.message.data) - strlen(event.message.data) - 1);
+    strncat(event.data, value,
+            sizeof(event.data) - strlen(event.data) - 1);
+    strncat(event.data, "\n",
+            sizeof(event.data) - strlen(event.data) - 1);
     event._hasData = true;
 
   } else if (strcmp(name, "event") == 0) {
@@ -627,9 +642,9 @@ void EventSource::_process_field(const char *name, const char *value,
     if (strnchr(value, '\0', strlen(value)) == nullptr)
       _setLastEventId(value);
 
-    strncpy(event.message.lastEventId, value,
-            sizeof(event.message.lastEventId));
-    event.message.lastEventId[sizeof(event.message.lastEventId) - 1] = '\0';
+    strncpy(event.lastEventId, value,
+            sizeof(event.lastEventId));
+    event.lastEventId[sizeof(event.lastEventId) - 1] = '\0';
 
   } else if (strcmp(name, "retry") == 0) {
     if (isdigits(value) && strlen(value) > 0 && strlen(value) < 10) {
