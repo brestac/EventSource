@@ -168,9 +168,9 @@ public:
   ~EventSource();
 
   void addEventListener(const char *type, const EventHandler &handler);
-  void close();
   template <size_t N, size_t M> void addHeader(char (&key)[N], char (&val)[M]);
-  void setAutoreconnect(bool autoreconnect);
+  void close();
+  void reconnect();
   void setRetryDelay(uint32_t retryDelay);
   void setTimeout(uint32_t timeout);
   // #ifndef ESP32
@@ -182,7 +182,6 @@ public:
 
   uint8_t readyState() { return _readyState; }
   bool secure() const { return _secure; }
-  bool autoreconnect() const { return _autoreconnect; }
   uint32_t retryDelay() const { return _retryDelay; }
   uint32_t timeout() const { return _timeout; }
 
@@ -216,10 +215,8 @@ private:
 
   uint16_t _apiPort;
   bool _secure;
-  bool _autoreconnect;
   uint32_t _retryDelay;
   uint8_t _readyState;
-  bool _initial_connection;
   uint64_t _lastConnectionTime;
   size_t _dispachQueueSize;
   bool _lock_queue;
@@ -437,7 +434,7 @@ inline bool _getHeaderValue(const char *data, size_t len,
   return false;
 }
 
-inline void strncpy_ss(char *dest, const char *src, size_t dest_size) {
+inline void _strncpy(char *dest, const char *src, size_t dest_size) {
   if (dest_size == 0) {
     return;
   }

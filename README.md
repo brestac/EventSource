@@ -79,7 +79,7 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `secure` | `bool` | `false` | Use ssl |
+| `secure` | `bool` | `false` | Connect using SSL (https) |
 | `headers` | `HeadersMap` | `{}` | Extra HTTP request headers |
 
 ### Methods
@@ -88,11 +88,11 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 |--------|-------------|---------|
 | `addEventListener(type, handler)` | Register a callback for an event type | - |
 | `addHeader(name, value)` | Add a custom HTTP header | - |
-| `setAutoreconnect(bool)` | Enable / disable auto-reconnect | true |
-| `setRetryDelay(ms)` | Change reconnect delay at runtime. May be overriden by sse retry field | 3000ms |
-| `setTimeout(bool)` | The timeout for the connection | 20s |
-| `close()` | Close the connection (disables auto-reconnect) | - |
-| `readyState()` | Returns `CONNECTING`, `OPEN` or `CLOSED` | - |
+| `reconnect()` | Reconnect when the connection is closed, for example after a server error response | - |
+| `setRetryDelay(ms)` | Change default reconnect delay in ms at runtime. May be overriden by sse retry field | 3000ms |
+| `setTimeout(s)` | The timeout for the connection in seconds | 20s |
+| `close()` | Close the connection permanently | - |
+| `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) | - |
 
 ### Event structure
 
@@ -100,11 +100,11 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 struct Event {
     char type[32];         // event type
     char origin[128];      // server hostname
-    char target[128];      // SSE path
-    char lastEventId[128]; // id field from the stream
-    char data[1024];       // event payload
+    char target[128];      // server path
+    char lastEventId[128]; // id field from the stream (data events only)
+    char data[1024];       // event payload (data events only)
     char message[256];     // error message (error events only)
-    int  code;             // error code   (error events only)
+    int  code;             // error code    (error events only)
 };
 ```
 
