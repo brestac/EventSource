@@ -75,11 +75,11 @@ constexpr size_t MAX_EVENT_DATA_SIZE = 1024U;
 constexpr size_t MAX_EVENT_ERROR_SIZE = 256U;
 constexpr size_t MAX_EVENT_TYPE_SIZE = 32U;
 constexpr size_t MAX_EVENT_ORIGIN_SIZE = 128U;
-constexpr size_t MAX_EVENT_HANDLER_COUNT = 8U;
+constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 8U;
 constexpr size_t MAX_EVENT_LINES = 20U;
 
 constexpr size_t MAX_RESPONSE_LINES = 20U;
-constexpr size_t MAX_HEADER_COUNT = 8U;
+constexpr uint8_t MAX_HEADER_COUNT = 8U;
 constexpr size_t MAX_HEADER_KEY_SIZE = 64U;
 constexpr size_t MAX_HEADER_VALUE_SIZE = 128U;
 
@@ -121,6 +121,14 @@ public:
   typedef std::map<std::string, CustomHeaderValue> HeadersMap;
 
   enum : uint8_t { CONNECTING = 0, OPEN = 1, CLOSED = 2 };
+
+  enum EventError : int {
+    ERR_INVALID_URL = 100, // Invalid URL
+    ERR_SERVER_TIMEOUT = 101, // Server did not respond in time
+    ERR_REDIRECT_LOCATION = 102, // Location header is not present
+    ERR_SERVER_INVALID_RESPONSE = 103,// Invalid response from server
+    ERR_SERVER_INVALID_CONTENT_TYPE = 104 // Content-Type is not text/event-stream
+  };
 
   struct Event {
   public:
@@ -229,7 +237,7 @@ private:
   static void _onDisconnectStatic(void *arg, AsyncClient *client);
   static void _onDataStatic(void *arg, AsyncClient *client, void *data,
                             size_t len);
-  static void _onErrorStatic(void *arg, AsyncClient *client, uint8_t error);
+  static void _onErrorStatic(void *arg, AsyncClient *client, int error);
   static void _onTimeoutStatic(void *arg, AsyncClient *client, uint32_t time);
 
   // Internal helpers
@@ -242,8 +250,8 @@ private:
   void _onConnect(AsyncClient *client);
   void _onDisconnect(AsyncClient *client);
   void _onData(AsyncClient *client, void *data, size_t len);
-  void _onError(AsyncClient *client, uint8_t error);
-  void _onError(AsyncClient *client, uint8_t code, const char *error);
+  void _onError(AsyncClient *client, int error);
+  void _onError(AsyncClient *client, int code, const char *error);
 
   void _addHeaders(const HeadersMap &headers);
   void _addHeader(const char *key, size_t key_len,
@@ -259,7 +267,7 @@ private:
   void _addToQueue(Event &event);
   void _processQueue();
   void _queueConnectionEvent();
-  void _queueErrorEvent(uint8_t code, const char *error);
+  void _queueErrorEvent(int code, const char *error);
   void _parse_event_stream(const char *cstr, size_t len);
   bool _process_line(const char *cstr, size_t len, Event &event);
   void _process_field(const char *name, const char *value, Event &event);

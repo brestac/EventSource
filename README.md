@@ -88,7 +88,7 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 |--------|-------------|---------|
 | `addEventListener(type, handler)` | Register a callback for an event type | - |
 | `addHeader(name, value)` | Add a custom HTTP header | - |
-| `reconnect()` | Reconnect when the connection is closed, for example after a server error response | - |
+| `reconnect()` | Reconnect when the readyState is CLOSED, for example after a server response not OK | - |
 | `setRetryDelay(ms)` | Change default reconnect delay in ms at runtime. May be overriden by sse retry field | 3000ms |
 | `setTimeout(s)` | The timeout for the connection in seconds | 20s |
 | `close()` | Close the connection permanently | - |
@@ -107,6 +107,37 @@ struct Event {
     int  code;             // error code    (error events only)
 };
 ```
+
+### Error codes
+
+| Code | Name | Description | Reconnection |
+|--------|-------------|---------|---------|
+|0|ERR_OK|No error, everything OK.| YES |
+|-1|ERR_MEM|Out of memory error.| YES |
+|-2|ERR_BUF |Buffer error.| YES |
+|-3|ERR_TIMEOUT|Timeout.| YES |
+|-4|ERR_RTE|Routing problem.| YES |
+|-5|ERR_INPROGRESS|Operation in progress| YES |
+|-6|ERR_VAL |Illegal value.| YES |
+|-7|ERR_WOULDBLOCK|Operation would block.| YES |
+|-8|ERR_USE|Address in use.| YES |
+|-9|ERR_ALREADY|Already connecting.| YES |
+|-10|ERR_ISCONN|Conn already established.| YES |
+|-11|ERR_CONN|Not connected.| YES |
+|-12|ERR_IF|Low-level netif error.| YES |
+|-13|ERR_ABRT|Connection aborted.| YES |
+|-14|ERR_RST|Connection reset.| YES |
+|-15|ERR_CLSD|Connection closed.| YES |
+|-16|ERR_ARG|Illegal argument.| YES |
+|-55|ERR_DNS|DNS error.| YES |
+|100|ERR_INVALID_URL|Invalid URL.| NO |
+|101|ERR_SERVER_TIMEOUT|Server did not respond in time.| YES |
+|102|ERR_REDIRECT_LOCATION|Location header is not present.| NO |
+|103|ERR_SERVER_INVALID_RESPONSE|Invalid response from server.| NO |
+|104|ERR_SERVER_INVALID_CONTENT_TYPE|Content-Type is not text/event-stream.| NO |
+|201-599|HTTP_STATUS|Invalid status code response (not 200 or 301).| NO |
+
+Note: In 'error' event listener, you can force a reconnection with the non-normative reconnect() function.
 
 ---
 

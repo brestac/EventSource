@@ -81,7 +81,7 @@ bool EventSource::_parseUrl(const char *url) {
     n = sscanf(url, "%*[^:]://%127[^:/]/%127s", host, path);
     if (n < 1) {
       DEBUG_PRINTF("Failed to parse URL: %s\n", url);
-      _onError(nullptr, 0, "Failed to parse URL");
+      _onError(nullptr, ERR_INVALID_URL, "Failed to parse URL");
 #ifdef __EXCEPTIONS
       throw std::runtime_error("[SyntaxError] Failed to parse URL");
 #endif
@@ -118,7 +118,6 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
     _strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
   } else {
     DEBUG_PRINTLN("Invalid host type");
-    _onError(nullptr, 0, "Invalid host type");
     return;
   }
   _apiHost[sizeof(_apiHost) - 1] = '\0';
@@ -131,7 +130,6 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
     _addHeaders(options);
   } else {
     DEBUG_PRINTLN("Invalid options type");
-    _onError(nullptr, 0, "Invalid options type");
     return;
   }
 
@@ -281,7 +279,7 @@ void EventSource::_onDataStatic(void *arg, AsyncClient *client, void *data,
 }
 
 void EventSource::_onErrorStatic(void *arg, AsyncClient *client,
-                                 uint8_t error) {
+                                 int error) {
   static_cast<EventSource *>(arg)->_onError(client, error);
 }
 
@@ -339,7 +337,7 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
         valid, statusCode);
     if (!valid) {
       DEBUG_PRINTLN("[SSE] Content-Type: text/event-stream not found");
-      _onError(client, 0, "Content-Type: text/event-stream not found");
+      _onError(client, ERR_SERVER_INVALID_CONTENT_TYPE, "Content-Type: text/event-stream not found");
       return;
     }
     // Handle redirection
@@ -353,7 +351,7 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
       } else {
         DEBUG_PRINTLN("[SSE] Location header not found");
         _onError(
-            client, 0,
+            client, ERR_REDIRECT_LOCATION,
             "Redirection requested but Location header not found or invalid");
       }
 
@@ -405,11 +403,11 @@ bool EventSource::_handleRedirections(char *data, size_t len) {
   return parsed;
 }
 
-void EventSource::_onError(AsyncClient *client, uint8_t error) {
+void EventSource::_onError(AsyncClient *client, int error) {
   _onError(client, error, client->errorToString(error));
 }
 
-void EventSource::_onError(AsyncClient *client, uint8_t code,
+void EventSource::_onError(AsyncClient *client, int code,
                            const char *error) {
   DEBUG_PRINTF("[SSE] Error: %s\n", error);
   client->close();
@@ -427,7 +425,7 @@ void EventSource::_queueConnectionEvent() {
   _addToQueue(event);
 }
 
-void EventSource::_queueErrorEvent(uint8_t code, const char *error) {
+void EventSource::_queueErrorEvent(int code, const char *error) {
   Event event;
   event.code = code;
   strncpy(event.type, "error", sizeof(event.type));
