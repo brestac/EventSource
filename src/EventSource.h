@@ -442,15 +442,12 @@ inline bool _getHeaderValue(const char *data, size_t len,
   return false;
 }
 
-inline void _strncpy(char *dest, const char *src, size_t dest_size) {
-  if (dest_size == 0) {
-    return;
-  }
+// template<size_t N>
+// inline void _strncpy(char (&dest)[N], const char *src, size_t dest_size) {
+//   if (dest_size == 0) {
+//     return;
+//   }
 
-  strncpy(dest, src, dest_size - 1);
-  dest[dest_size - 1] = '\0';
-
-  if (strlen(src) >= dest_size) {
-    DEBUG_PRINTF("[EventSource] Warning: Truncated string '%s' to '%s'\n", src, dest);
-  }
-}
+//   strncpy(dest, src, dest_size);
+//   dest[N - 1] = '\0';
+// }

@@ -4,21 +4,21 @@
 // #include <freertos/FreeRTOS.h>
 // #include <freertos/task.h>
 // #endif
-template <class T>
+template<class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
-template <typename T> struct is_char_array : std::false_type {};
+template<typename T> struct is_char_array : std::false_type {};
 
-template <typename T, size_t N>
+template<typename T, size_t N>
 struct is_char_array<T[N]> : std::is_same<remove_cvref_t<T>, char> {};
 
 // template <typename T>
 // inline constexpr bool is_char_array_v = is_char_array<T>::value;
 
-template <typename T>
+template<typename T>
 constexpr bool is_string_host_v =
-    std::is_same_v<remove_cvref_t<T>, char *> || is_char_array<T>::value;
-template <typename T>
+  std::is_same_v<remove_cvref_t<T>, char *> || is_char_array<T>::value;
+template<typename T>
 constexpr bool is_ip_host_v = std::is_same_v<remove_cvref_t<T>, IPAddress>;
 
 // ---------- Event ----------
@@ -29,9 +29,9 @@ EventSource::Event::Event() {
 
 void EventSource::Event::print() {
   DEBUG_PRINTF(
-      "[Event]  type: '%s', origin: '%s', data: '%s', lastEventId: '%s', "
-      "error: '%s', code: %d",
-      type, origin, data, lastEventId, message, code);
+    "[Event]  type: '%s', origin: '%s', data: '%s', lastEventId: '%s', "
+    "error: '%s', code: %d",
+    type, origin, data, lastEventId, message, code);
 }
 
 // ---------- EventSource public ----------
@@ -72,8 +72,8 @@ EventSource::~EventSource() {
 // ---------- EventSource private: init ----------
 
 bool EventSource::_parseUrl(const char *url) {
-  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
-  char path[MAX_SSE_PATH_SIZE] = {0};
+  char host[MAX_EVENT_ORIGIN_SIZE] = { 0 };
+  char path[MAX_SSE_PATH_SIZE] = { 0 };
   uint16_t port = DEFAULT_PORT;
 
   int n = sscanf(url, "%*[^:]://%127[^:/]:%hu/%127s", host, &port, path);
@@ -89,7 +89,8 @@ bool EventSource::_parseUrl(const char *url) {
     }
   }
 
-  _strncpy(_apiHost, host, MAX_EVENT_ORIGIN_SIZE);
+  strncpy(_apiHost, host, MAX_EVENT_ORIGIN_SIZE);
+  _apiHost[MAX_EVENT_ORIGIN_SIZE - 1] = '\0';
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
@@ -99,7 +100,7 @@ bool EventSource::_parseUrl(const char *url) {
   return true;
 }
 
-template <typename Opts>
+template<typename Opts>
 void EventSource::_init(const char *url, Opts options) {
 
   bool parsed = _parseUrl(url);
@@ -108,14 +109,16 @@ void EventSource::_init(const char *url, Opts options) {
   }
 }
 
-template <typename Host, typename Opts>
+template<typename Host, typename Opts>
 void EventSource::_init(Host host, const char *path, uint16_t port,
                         const Opts &options, bool secure) {
 
   if constexpr (is_string_host_v<Host>) {
-    _strncpy(_apiHost, host, sizeof(_apiHost));
+    strncpy(_apiHost, host, sizeof(_apiHost));
+    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else if constexpr (is_ip_host_v<Host>) {
-    _strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+    strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else {
     DEBUG_PRINTLN("Invalid host type");
     return;
@@ -180,11 +183,14 @@ void EventSource::_addHeaders(const HeadersMap &headers) {
 }
 // ---------- update (main loop) ----------
 // #ifndef ESP32
-void EventSource::update() { _update(); }
+void EventSource::update() {
+  _update();
+}
 // #endif
 
 void EventSource::_update() {
   static uint64_t lastQueueUpdate = 0;
+  static bool initial_conn = true;
 
   if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL) {
     _processQueue();
@@ -203,10 +209,10 @@ void EventSource::_update() {
       _lastConnectionTime = millis();
       _client->close();
     }
-  } else if ((millis() - _lastConnectionTime) >
-             _retryDelay * _retryDelayMultiplier) {
+  } else if (initial_conn || (millis() - _lastConnectionTime) > _retryDelay * _retryDelayMultiplier) {
     DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
                  millis() - _lastConnectionTime);
+    initial_conn = false;
     _lastConnectionTime = millis();
     _retryCount++;
     _connect();
@@ -230,35 +236,32 @@ void EventSource::_addHeader(const char *key, size_t key_len,
   if (key == nullptr || key_len == 0 || key_len > MAX_HEADER_KEY_SIZE)
     return;
 
-  if (strcmp(key, "Last-Event-ID") == 0 || strcmp(key, "Content-Type") == 0 ||
-      strcmp(key, "Content-Length") == 0 ||
-      strcmp(key, "Transfer-Encoding") == 0 || strcmp(key, "Connection") == 0 ||
-      strcmp(key, "Keep-Alive") == 0 || strcmp(key, "Accept") == 0 ||
-      strcmp(key, "Cache-Control") == 0 ||
-      strcmp(key, "Accept-Encoding") == 0 || strcmp(key, "Host") == 0) {
+  if (strcmp(key, "Last-Event-ID") == 0 || strcmp(key, "Content-Type") == 0 || strcmp(key, "Content-Length") == 0 || strcmp(key, "Transfer-Encoding") == 0 || strcmp(key, "Connection") == 0 || strcmp(key, "Keep-Alive") == 0 || strcmp(key, "Accept") == 0 || strcmp(key, "Cache-Control") == 0 || strcmp(key, "Accept-Encoding") == 0 || strcmp(key, "Host") == 0) {
     DEBUG_PRINTF("[SSE] Header %s is not allowed\n", key);
     return;
   }
 
   if (!_contains(_customHeaders, key)) {
-    _strncpy(_customHeaders[_customHeaderCount].key, key, MAX_HEADER_KEY_SIZE);
+    strncpy(_customHeaders[_customHeaderCount].key, key, MAX_HEADER_KEY_SIZE);
+    _customHeaders[_customHeaderCount].key[MAX_HEADER_KEY_SIZE - 1] = '\0';
 
     std::visit(
-        [&](auto &&arg) {
-          using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, std::string>) {
-            _strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(),
-                     MAX_HEADER_VALUE_SIZE);
-          } else if constexpr (std::is_convertible_v<T, int>) {
-            snprintf(_customHeaders[_customHeaderCount].value,
-                     MAX_HEADER_VALUE_SIZE, "%d", (int)arg);
-          } else if constexpr (std::is_convertible_v<T, float>) {
-            snprintf(_customHeaders[_customHeaderCount].value,
-                     MAX_HEADER_VALUE_SIZE, "%f", (float)arg);
-          }
-        },
-        value);
+      [&](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, std::string>) {
+          strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(),
+                  MAX_HEADER_VALUE_SIZE);
+        } else if constexpr (std::is_convertible_v<T, int>) {
+          snprintf(_customHeaders[_customHeaderCount].value,
+                   MAX_HEADER_VALUE_SIZE, "%d", (int)arg);
+        } else if constexpr (std::is_convertible_v<T, float>) {
+          snprintf(_customHeaders[_customHeaderCount].value,
+                   MAX_HEADER_VALUE_SIZE, "%f", (float)arg);
+        }
+      },
+      value);
 
+    _customHeaders[_customHeaderCount].value[MAX_HEADER_VALUE_SIZE - 1] = '\0';
     _customHeaderCount++;
   }
 }
@@ -296,6 +299,7 @@ void EventSource::_onConnect(AsyncClient *client) {
 }
 
 void EventSource::_onDisconnect(AsyncClient *client) {
+  // reestablish the connection in case of disconnect
   _readyState = CONNECTING;
 
   DEBUG_PRINTF("onDisconnect _readyState=%hhu\n", _readyState);
@@ -310,12 +314,11 @@ bool EventSource::_isResponseValidEventStream(const char *data, size_t len,
     statusCode = code;
   }
 
-  char contentTypeValue[MAX_HEADER_VALUE_SIZE] = {0};
+  char contentTypeValue[MAX_HEADER_VALUE_SIZE] = { 0 };
   bool hasContentType =
-      _getHeaderValue(data, len, "Content-Type", contentTypeValue);
+    _getHeaderValue(data, len, "Content-Type", contentTypeValue);
 
-  bool valid = hasContentType &&
-               (strncmp(contentTypeValue, "text/event-stream", 16) == 0);
+  bool valid = hasContentType && (strncmp(contentTypeValue, "text/event-stream", 16) == 0);
 
   DEBUG_PRINTF("[SSE] statusCode=%d '%s'\n", statusCode, contentTypeValue);
   return valid;
@@ -333,8 +336,8 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
     int statusCode = -1;
     bool valid = _isResponseValidEventStream(body_start, len, statusCode);
     DEBUG_PRINTF(
-        "[SSE] Response headers checked: contentTypeOk=%d, statusCode=%d\n",
-        valid, statusCode);
+      "[SSE] Response headers checked: contentTypeOk=%d, statusCode=%d\n",
+      valid, statusCode);
     if (!valid) {
       DEBUG_PRINTLN("[SSE] Content-Type: text/event-stream not found");
       _onError(client, ERR_SERVER_INVALID_CONTENT_TYPE, "Content-Type: text/event-stream not found");
@@ -351,8 +354,8 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
       } else {
         DEBUG_PRINTLN("[SSE] Location header not found");
         _onError(
-            client, ERR_REDIRECT_LOCATION,
-            "Redirection requested but Location header not found or invalid");
+          client, ERR_REDIRECT_LOCATION,
+          "Redirection requested but Location header not found or invalid");
       }
 
       return;
@@ -388,7 +391,7 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
 
 bool EventSource::_handleRedirections(char *data, size_t len) {
   DEBUG_PRINTLN("[SSE] Redirection");
-  char new_url[MAX_EVENT_ORIGIN_SIZE + MAX_SSE_PATH_SIZE] = {0};
+  char new_url[MAX_EVENT_ORIGIN_SIZE + MAX_SSE_PATH_SIZE] = { 0 };
 
   bool found = _getHeaderValue(data, len, "Location", new_url);
 
@@ -407,10 +410,17 @@ void EventSource::_onError(AsyncClient *client, int error) {
   _onError(client, error, client->errorToString(error));
 }
 
+/*
+If res is an aborted network error, then fail the connection.
+Otherwise, if res is a network error, then reestablish the connection, unless the user agent knows that to be futile, in which case the user agent may fail the connection.
+*/
 void EventSource::_onError(AsyncClient *client, int code,
-                           const char *error) {
+                      const char *error) {
   DEBUG_PRINTF("[SSE] Error: %s\n", error);
-  client->close();
+  // Bellow are recoverable errors that do not call error handler and leave readyState to CONNECTING.
+  if (code == ERR_OK || code == ERR_TIMEOUT || code == ERR_ALREADY || code == ERR_ISCONN || code == ERR_CONN || code == ERR_RST || code == ERR_CLSD) {
+    return;
+  }
 
   _readyState = CLOSED;
   _retryCount = 0;
@@ -429,7 +439,9 @@ void EventSource::_queueErrorEvent(int code, const char *error) {
   Event event;
   event.code = code;
   strncpy(event.type, "error", sizeof(event.type));
-  _strncpy(event.message, error, sizeof(event.message));
+  strncpy(event.message, error, sizeof(event.message));
+  event.message[sizeof(event.message) - 1] = '\0';
+
   _addToQueue(event);
 }
 
@@ -442,8 +454,7 @@ void EventSource::_dispachEvent(Event &event) {
     event.data[dlen - 1] = '\0';
 
   for (uint8_t i = 0; i < _eventHandlerCount; i++) {
-    if (strcmp(_eventHandlers[i].key, event.type) == 0 &&
-        _eventHandlers[i].value) {
+    if (strcmp(_eventHandlers[i].key, event.type) == 0 && _eventHandlers[i].value) {
       _eventHandlers[i].value(event);
       event._dispached = true;
       break;
@@ -550,7 +561,8 @@ void EventSource::addEventListener(const char *type,
   }
 
   if (!_contains(_eventHandlers, type)) {
-    _strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
+    strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
+    _eventHandlers[_eventHandlerCount].key[MAX_EVENT_TYPE_SIZE - 1] = '\0';
     _eventHandlers[_eventHandlerCount].value = handler;
     _eventHandlerCount++;
     DEBUG_PRINTF("[SSE] Added handler for '%s', count: %d\n", type,
@@ -558,7 +570,9 @@ void EventSource::addEventListener(const char *type,
   }
 }
 
-void EventSource::_disconnect() { _client->close(); }
+void EventSource::_disconnect() {
+  _client->close();
+}
 
 void EventSource::close() {
   _readyState = CLOSED;
@@ -578,7 +592,9 @@ void EventSource::setRetryDelay(uint32_t retryDelay) {
   }
 }
 
-void EventSource::setTimeout(uint32_t timeout) { _timeout = timeout; }
+void EventSource::setTimeout(uint32_t timeout) {
+  _timeout = timeout;
+}
 
 void EventSource::_setLastEventId(const char *lastEventId) {
   if (lastEventId == nullptr) {
@@ -588,7 +604,8 @@ void EventSource::_setLastEventId(const char *lastEventId) {
   }
 
   if (strcmp(lastEventId, _lastEventId) != 0) {
-    _strncpy(_lastEventId, lastEventId, sizeof(_lastEventId));
+    strncpy(_lastEventId, lastEventId, sizeof(_lastEventId));
+    _lastEventId[sizeof(_lastEventId) - 1] = '\0';
     DEBUG_PRINTF("Last event ID updated to: %s\n", _lastEventId);
   }
 }
@@ -598,7 +615,8 @@ void EventSource::_setLastEventId(const char *lastEventId) {
 EventSource::Event EventSource::_newMessageEvent() {
   DEBUG_PRINTLN("Creating new event");
   Event event;
-  _strncpy(event.origin, _apiHost, sizeof(event.origin));
+  strncpy(event.origin, _apiHost, sizeof(event.origin));
+  event.origin[sizeof(event.origin) - 1] = '\0';
   return event;
 }
 
@@ -650,32 +668,34 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
     return false;
   }
 
-  if (len < 4) {
+  if (cstr[0] == ':') {
+    DEBUG_PRINTLN("Ignoring comment line");
+    return false;
+  } else if (len < 4) {
     DEBUG_PRINTLN("Invalid line");
     return false;
   }
 
-  if (cstr[0] == ':') {
-    DEBUG_PRINTLN("Ignoring comment line");
-    return false;
-  }
-
   const char *colon_pos = strnchr(cstr, ':', len);
+
   if (colon_pos != nullptr) {
     char field[MAX_EVENT_NAME_SIZE];
     char value[MAX_EVENT_VALUE_SIZE];
 
-    _strncpy(field, cstr, colon_pos - cstr);
+    size_t field_len = std::min((size_t)(colon_pos - cstr), MAX_EVENT_NAME_SIZE - 1);
+
+    strncpy(field, cstr, field_len);
+    field[field_len] = '\0';
 
     const char *value_start = colon_pos + 1;
+
     if (*value_start == ' ')
       value_start++;
 
-    size_t value_len = len - (value_start - cstr);
-    if (value_len >= MAX_EVENT_VALUE_SIZE)
-      value_len = MAX_EVENT_VALUE_SIZE - 1;
+    size_t value_len = std::min(len - (value_start - cstr), MAX_EVENT_VALUE_SIZE - 1);
 
-    _strncpy(value, value_start, value_len);
+    strncpy(value, value_start, value_len);
+    value[value_len] = '\0';
 
     DEBUG_PRINTF("Field: '%s', Value: '%s'\n", field, value);
     _process_field(field, value, event);
@@ -696,14 +716,16 @@ void EventSource::_process_field(const char *name, const char *value,
       DEBUG_PRINTLN("Ping received, sending pong");
       _client->write("pong\r\n", 5);
     } else if (strlen(value) > 0) {
-      _strncpy(event.type, value, sizeof(event.type));
+      strncpy(event.type, value, sizeof(event.type));
+      event.type[sizeof(event.type) - 1] = '\0';
     }
 
   } else if (strcmp(name, "id") == 0) {
     if (strnchr(value, '\0', strlen(value)) == nullptr)
       _setLastEventId(value);
 
-    _strncpy(event.lastEventId, value, sizeof(event.lastEventId));
+    strncpy(event.lastEventId, value, sizeof(event.lastEventId));
+    event.lastEventId[sizeof(event.lastEventId) - 1] = '\0';
   } else if (strcmp(name, "retry") == 0) {
     if (isdigits(value) && strlen(value) > 0 && strlen(value) < 10) {
       long retry = strtol(value, nullptr, 10);
