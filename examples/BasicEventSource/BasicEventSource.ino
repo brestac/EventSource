@@ -54,7 +54,7 @@ void setup() {
 }
 
 void loop() {
-    if (WiFi.status == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
       source.update();
     }
 

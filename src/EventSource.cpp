@@ -89,7 +89,8 @@ bool EventSource::_parseUrl(const char *url) {
     }
   }
 
-  _strncpy(_apiHost, host, MAX_EVENT_ORIGIN_SIZE);
+  strncpy(_apiHost, host, MAX_EVENT_ORIGIN_SIZE);
+  _apiHost[MAX_EVENT_ORIGIN_SIZE - 1] = '\0';
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
@@ -113,9 +114,11 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
                         const Opts &options, bool secure) {
 
   if constexpr (is_string_host_v<Host>) {
-    _strncpy(_apiHost, host, sizeof(_apiHost));
+    strncpy(_apiHost, host, sizeof(_apiHost));
+    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else if constexpr (is_ip_host_v<Host>) {
-    _strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+    strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else {
     DEBUG_PRINTLN("Invalid host type");
     return;
@@ -241,13 +244,14 @@ void EventSource::_addHeader(const char *key, size_t key_len,
   }
 
   if (!_contains(_customHeaders, key)) {
-    _strncpy(_customHeaders[_customHeaderCount].key, key, MAX_HEADER_KEY_SIZE);
+    strncpy(_customHeaders[_customHeaderCount].key, key, MAX_HEADER_KEY_SIZE);
+    _customHeaders[_customHeaderCount].key[MAX_HEADER_KEY_SIZE - 1] = '\0';
 
     std::visit(
         [&](auto &&arg) {
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, std::string>) {
-            _strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(),
+            strncpy(_customHeaders[_customHeaderCount].value, arg.c_str(),
                      MAX_HEADER_VALUE_SIZE);
           } else if constexpr (std::is_convertible_v<T, int>) {
             snprintf(_customHeaders[_customHeaderCount].value,
@@ -258,7 +262,8 @@ void EventSource::_addHeader(const char *key, size_t key_len,
           }
         },
         value);
-
+    
+    _customHeaders[_customHeaderCount].value[MAX_HEADER_VALUE_SIZE - 1] = '\0';
     _customHeaderCount++;
   }
 }
@@ -429,7 +434,9 @@ void EventSource::_queueErrorEvent(int code, const char *error) {
   Event event;
   event.code = code;
   strncpy(event.type, "error", sizeof(event.type));
-  _strncpy(event.message, error, sizeof(event.message));
+  strncpy(event.message, error, sizeof(event.message));
+  event.message[sizeof(event.message) - 1] = '\0';
+  
   _addToQueue(event);
 }
 
@@ -550,7 +557,8 @@ void EventSource::addEventListener(const char *type,
   }
 
   if (!_contains(_eventHandlers, type)) {
-    _strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
+    strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
+    _eventHandlers[_eventHandlerCount].key[MAX_EVENT_TYPE_SIZE - 1] = '\0';
     _eventHandlers[_eventHandlerCount].value = handler;
     _eventHandlerCount++;
     DEBUG_PRINTF("[SSE] Added handler for '%s', count: %d\n", type,
@@ -588,7 +596,8 @@ void EventSource::_setLastEventId(const char *lastEventId) {
   }
 
   if (strcmp(lastEventId, _lastEventId) != 0) {
-    _strncpy(_lastEventId, lastEventId, sizeof(_lastEventId));
+    strncpy(_lastEventId, lastEventId, sizeof(_lastEventId));
+    _lastEventId[sizeof(_lastEventId) - 1] = '\0';
     DEBUG_PRINTF("Last event ID updated to: %s\n", _lastEventId);
   }
 }
@@ -598,7 +607,8 @@ void EventSource::_setLastEventId(const char *lastEventId) {
 EventSource::Event EventSource::_newMessageEvent() {
   DEBUG_PRINTLN("Creating new event");
   Event event;
-  _strncpy(event.origin, _apiHost, sizeof(event.origin));
+  strncpy(event.origin, _apiHost, sizeof(event.origin));
+  event.origin[sizeof(event.origin) - 1] = '\0';
   return event;
 }
 
@@ -650,32 +660,35 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
     return false;
   }
 
-  if (len < 4) {
-    DEBUG_PRINTLN("Invalid line");
-    return false;
-  }
-
   if (cstr[0] == ':') {
     DEBUG_PRINTLN("Ignoring comment line");
     return false;
   }
+  else if (len < 4) {
+    DEBUG_PRINTLN("Invalid line");
+    return false;
+  }
 
   const char *colon_pos = strnchr(cstr, ':', len);
+  
   if (colon_pos != nullptr) {
     char field[MAX_EVENT_NAME_SIZE];
     char value[MAX_EVENT_VALUE_SIZE];
 
-    _strncpy(field, cstr, colon_pos - cstr);
+    size_t field_len = std::min((size_t)(colon_pos - cstr), MAX_EVENT_NAME_SIZE - 1);
+    
+    strncpy(field, cstr, field_len);
+    field[field_len] = '\0';
 
     const char *value_start = colon_pos + 1;
+    
     if (*value_start == ' ')
       value_start++;
 
-    size_t value_len = len - (value_start - cstr);
-    if (value_len >= MAX_EVENT_VALUE_SIZE)
-      value_len = MAX_EVENT_VALUE_SIZE - 1;
+    size_t value_len = std::min(len - (value_start - cstr), MAX_EVENT_VALUE_SIZE - 1);
 
-    _strncpy(value, value_start, value_len);
+    strncpy(value, value_start, value_len);
+    value[value_len] = '\0';
 
     DEBUG_PRINTF("Field: '%s', Value: '%s'\n", field, value);
     _process_field(field, value, event);
@@ -696,14 +709,16 @@ void EventSource::_process_field(const char *name, const char *value,
       DEBUG_PRINTLN("Ping received, sending pong");
       _client->write("pong\r\n", 5);
     } else if (strlen(value) > 0) {
-      _strncpy(event.type, value, sizeof(event.type));
+      strncpy(event.type, value, sizeof(event.type));
+      event.type[sizeof(event.type) - 1] = '\0';
     }
 
   } else if (strcmp(name, "id") == 0) {
     if (strnchr(value, '\0', strlen(value)) == nullptr)
       _setLastEventId(value);
 
-    _strncpy(event.lastEventId, value, sizeof(event.lastEventId));
+    strncpy(event.lastEventId, value, sizeof(event.lastEventId));
+    event.lastEventId[sizeof(event.lastEventId) - 1] = '\0';
   } else if (strcmp(name, "retry") == 0) {
     if (isdigits(value) && strlen(value) > 0 && strlen(value) < 10) {
       long retry = strtol(value, nullptr, 10);
