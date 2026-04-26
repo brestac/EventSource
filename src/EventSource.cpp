@@ -431,8 +431,32 @@ bool EventSource::_handleRedirection(char *data, size_t len, int statusCode) {
   _readyState = CONNECTING;
   _connect(host, path, port, secure);
 
-void EventSource::_onError(AsyncClient *client, int error) {
-  _onError(client, error, client->errorToString(error));
+  return true;
+}
+/*
+enum err_enum_t {
+  ERR_OK = 0,
+  ERR_MEM = -1,
+  ERR_BUF = -2,
+  ERR_TIMEOUT = -3,
+  ERR_RTE = -4,
+  ERR_INPROGRESS = -5,
+  ERR_VAL = -6,
+  ERR_WOULDBLOCK = -7,
+  ERR_USE = -8,
+  ERR_ALREADY = -9,
+  ERR_ISCONN = -10,
+  ERR_CONN = -11,
+  ERR_IF = -12,
+  ERR_ABRT = -13,
+  ERR_RST = -14,
+  ERR_CLSD = -15,
+  ERR_ARG = -16
+}
+*/
+bool EventSource::_is_abort_error(int code) {
+  // ERR_MEM, ERR_BUF, ERR_VAL, ERR_WOULDBLOCK, ERR_IF, ERR_ABRT, ERR_ARG
+  return code == ERR_MEM || code == ERR_BUF || code == ERR_VAL || code == ERR_WOULDBLOCK || code == ERR_IF || code == ERR_ABRT || code == ERR_ARG;
 }
 /*
 If res is an aborted network error, then fail the connection.
@@ -440,13 +464,14 @@ Otherwise, if res is a network error, then reestablish the connection, unless
 the user agent knows that to be futile, in which case the user agent may fail
 the connection.
 */
-void EventSource::_onError(AsyncClient *client, int code,
-                      const char *error) {
-  DEBUG_PRINTF("[SSE] Error: %s\n", error);
-  // Bellow are recoverable errors that do not call error handler and leave readyState to CONNECTING.
-  if (code == ERR_OK || code == ERR_TIMEOUT || code == ERR_ALREADY || code == ERR_ISCONN || code == ERR_CONN || code == ERR_RST || code == ERR_CLSD) {
-    return;
+void EventSource::_onError(AsyncClient *client, int error) {
+  if (_is_abort_error(error)) {
+    _onError(client, error, client->errorToString(error));
   }
+}
+
+void EventSource::_onError(AsyncClient *client, int code, const char *error) {
+  DEBUG_PRINTF("[SSE] Error: %s\n", error);
 
   _readyState = CLOSED;
   _retryCount = 0;

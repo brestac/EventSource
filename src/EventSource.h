@@ -261,6 +261,7 @@ private:
   void _connect();
   void _connect(const char *host, const char *path, uint16_t port, bool secure);
   void _disconnect();
+  bool _is_abort_error(int code);
   bool _handleRedirection(char *data, size_t len, int statusCode);
   bool _is_permanent_redirection(int statusCode);
   bool _is_temporary_redirection(int statusCode);
