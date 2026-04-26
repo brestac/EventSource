@@ -71,14 +71,14 @@ EventSource::~EventSource() {
 
 // ---------- EventSource private: init ----------
 
-bool EventSource::_parseUrl(const char *url) {
-  char host[MAX_EVENT_ORIGIN_SIZE] = { 0 };
-  char path[MAX_SSE_PATH_SIZE] = { 0 };
-  uint16_t port = DEFAULT_PORT;
+bool EventSource::_parseURL(const char *url, char *host, char *path, uint16_t& port, bool& secure) {
+  char parsed_host[MAX_EVENT_ORIGIN_SIZE] = {0};
+  char parsed_path[MAX_SSE_PATH_SIZE] = {0};
+  uint16_t parsed_port = DEFAULT_PORT;
 
-  int n = sscanf(url, "%*[^:]://%127[^:/]:%hu/%127s", host, &port, path);
+  int n = sscanf(url, "%*[^:]://%127[^:/]:%hu/%127s", parsed_host, &parsed_port, parsed_path);
   if (n <= 2) {
-    n = sscanf(url, "%*[^:]://%127[^:/]/%127s", host, path);
+    n = sscanf(url, "%*[^:]://%127[^:/]/%127s", parsed_host, parsed_path);
     if (n < 1) {
       DEBUG_PRINTF("Failed to parse URL: %s\n", url);
       _onError(nullptr, ERR_INVALID_URL, "Failed to parse URL");
@@ -89,13 +89,24 @@ bool EventSource::_parseUrl(const char *url) {
     }
   }
 
-  strncpy(_apiHost, host, MAX_EVENT_ORIGIN_SIZE);
-  _apiHost[MAX_EVENT_ORIGIN_SIZE - 1] = '\0';
-  snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
-  _ssePath[sizeof(_ssePath) - 1] = '\0';
+  secure = strncmp(url, "https://", 8) == 0;
 
+  return true;
+}
+
+bool EventSource::_setURL(const char *url) {
+  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
+  char path[MAX_SSE_PATH_SIZE] = {0};  
+  uint16_t port = DEFAULT_PORT;
+  bool secure = false;
+
+  bool parsed = _parseURL(url, host, path, port, secure);
+  if (!parsed) return false;
+
+  strncpy(_apiHost, host, sizeof(_apiHost));
+  snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _apiPort = port;
-  _secure = strncmp(url, "https://", 8) == 0;
+  _secure = secure;
 
   return true;
 }
@@ -103,7 +114,7 @@ bool EventSource::_parseUrl(const char *url) {
 template <typename Opts>
 void EventSource::_init(const char *url, Opts options) {
 
-  bool parsed = _parseUrl(url);
+  bool parsed = _setURL(url);
   if (parsed) {
     _init(_apiHost, _ssePath, _apiPort, options, _secure);
   } 
@@ -207,21 +218,12 @@ void EventSource::_update() {
       _lastConnectionTime = millis();
       _client->close();
     }
-  } else if (initial_conn || (millis() - _lastConnectionTime) > _retryDelay * _retryDelayMultiplier) {
+  } else if (initial_conn || (millis() - _lastConnectionTime) >
+                                 _retryDelay * _retryDelayMultiplier) {
     DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
                  millis() - _lastConnectionTime);
     initial_conn = false;
-    _lastConnectionTime = millis();
-    _retryCount++;
     _connect();
-
-    if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
-      _retryCount = 0;
-      _retryDelayMultiplier++;
-      DEBUG_PRINTF("[SSE] Too many reconnection attempts, increasing retry "
-                   "delay to %zu seconds\n",
-                   _retryDelay * _retryDelayMultiplier);
-    }
   }
 }
 
@@ -348,18 +350,16 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
       return;
     }
     // Handle redirection
-    else if (statusCode == 301 || statusCode == 307) {
+    else if (_is_permanent_redirection(statusCode) || _is_temporary_redirection(statusCode)) {
       DEBUG_PRINTF("[SSE] Redirection %d\n", statusCode);
-      bool ok = _handleRedirections(body_start, len);
+      _client->close();
+      bool ok = _handleRedirection(body_start, len, statusCode);
 
-      if (ok) {
-        DEBUG_PRINTLN("[SSE] Redirection OK");
-        client->close();
-      } else {
+      if (!ok) {
         DEBUG_PRINTLN("[SSE] Location header not found");
         _onError(
-          client, ERR_REDIRECT_LOCATION,
-          "Redirection requested but Location header not found or invalid");
+            client, ERR_REDIRECT_LOCATION,
+            "Invalid Location header");
       }
 
       return;
@@ -393,22 +393,43 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
   }
 }
 
-bool EventSource::_handleRedirections(char *data, size_t len) {
-  DEBUG_PRINTLN("[SSE] Redirection");
-  char new_url[MAX_EVENT_ORIGIN_SIZE + MAX_SSE_PATH_SIZE] = { 0 };
+bool EventSource::_is_permanent_redirection(int statusCode) {
+  return statusCode == 301 || statusCode == 308;
+}
 
+bool EventSource::_is_temporary_redirection(int statusCode) {
+  return statusCode == 307 || statusCode == 302;
+}
+
+// TODO: Handle relative URL in Location header
+bool EventSource::_handleRedirection(char *data, size_t len, int statusCode) {
+  DEBUG_PRINTLN("[SSE] Redirection");
+  _readyState = CLOSED; // prevent automatic reconnection
+  _client->close();
+  
+  char new_url[MAX_EVENT_ORIGIN_SIZE + MAX_SSE_PATH_SIZE] = {0};
   bool found = _getHeaderValue(data, len, "Location", new_url);
 
-  if (!found)
-    return false;
+  if (!found) return false;
 
-  bool parsed = _parseUrl(new_url);
+  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
+  char path[MAX_SSE_PATH_SIZE] = {0};
+  uint16_t port = DEFAULT_PORT;
+  bool secure = false;
 
-  DEBUG_PRINTF("[SSE] New URL: %s://%s:%hu%s\n", _secure ? "https" : "http",
-               _apiHost, _apiPort, _ssePath);
+  bool parsed = _parseURL(new_url, host, path, port, secure);
+  if (!parsed) return false;
+  
+  if (_is_permanent_redirection(statusCode)) {
+    DEBUG_PRINTF("[SSE] Permanent redirection to %s\n", new_url);
+    strncpy(_apiHost, host, sizeof(_apiHost));
+    snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
+    _apiPort = port;
+    _secure = secure;
+  }
 
-  return parsed;
-}
+  _readyState = CONNECTING;
+  _connect(host, path, port, secure);
 
 void EventSource::_onError(AsyncClient *client, int error) {
   _onError(client, error, client->errorToString(error));
@@ -508,8 +529,11 @@ void EventSource::_processQueue() {
 
 // ---------- connection ----------
 void EventSource::_connect() {
-  DEBUG_PRINTF("[SSE] Connexion à %s:%hu%s retry:%u\n", _apiHost, _apiPort,
-               _ssePath, _retryDelay);
+  _connect(_apiHost, _ssePath, _apiPort, _secure);
+}
+
+void EventSource::_connect(const char * host, const char * path, uint16_t port, bool secure) {
+  DEBUG_PRINTF("[SSE] Connexion à %s:%hu%s ssl=%d\n", host, port, path, secure);
 
   if (_readyState == OPEN) {
     DEBUG_PRINTLN("[SSE] Déjà connecté");
@@ -517,10 +541,21 @@ void EventSource::_connect() {
   }
 
 #if ASYNC_TCP_SSL_ENABLED
-  _client->connect(_apiHost, _apiPort, _secure);
+  _client->connect(host, port, secure);
 #else
-  _client->connect(_apiHost, _apiPort);
+  _client->connect(host, port);
 #endif
+
+  _lastConnectionTime = millis();
+  _retryCount++;
+
+  if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
+    _retryCount = 0;
+    _retryDelayMultiplier *= 2;
+    DEBUG_PRINTF("[SSE] Too many reconnection attempts, increasing retry "
+                 "delay to %zu seconds\n",
+                 _retryDelay * _retryDelayMultiplier);
+  }
 }
 
 void EventSource::_sendRequest(AsyncClient *client) {

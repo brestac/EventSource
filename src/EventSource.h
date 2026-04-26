@@ -245,7 +245,8 @@ private:
   template <typename Host, typename Opts>
   void _init(Host host, const char *path, uint16_t port, const Opts &options,
              bool secure = false);
-  bool _parseUrl(const char *url);
+  bool _setURL(const char *url);
+  bool _parseURL(const char *url, char *host, char *path, uint16_t& port, bool& secure);
 
   void _onConnect(AsyncClient *client);
   void _onDisconnect(AsyncClient *client);
@@ -258,8 +259,11 @@ private:
                   const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();
+  void _connect(const char *host, const char *path, uint16_t port, bool secure);
   void _disconnect();
-  bool _handleRedirections(char *data, size_t len);
+  bool _handleRedirection(char *data, size_t len, int statusCode);
+  bool _is_permanent_redirection(int statusCode);
+  bool _is_temporary_redirection(int statusCode);
   bool _isResponseValidEventStream(const char *data, size_t len, int &statusCode);
   void _setLastEventId(const char *lastEventId);
   void _dispachEvent(Event &event);
