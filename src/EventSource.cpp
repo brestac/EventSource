@@ -319,9 +319,10 @@ void EventSource::_onConnect(AsyncClient *client) {
 
 void EventSource::_onDisconnect(AsyncClient *client) {
   // reestablish the connection in case of disconnect
-  _readyState = CONNECTING;
-
-  DEBUG_PRINTF("onDisconnect _readyState=%hhu\n", _readyState);
+  if (_readyState == OPEN) {
+    DEBUG_PRINTLN("[SSE] Déconnecté");
+    _readyState = CONNECTING;
+  }
 }
 
 bool EventSource::_getStatusCode(const char *data, size_t len, int &statusCode) {
