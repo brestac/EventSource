@@ -89,6 +89,11 @@ bool EventSource::_parseURL(const char *url, char *host, char *path, uint16_t& p
     }
   }
 
+  strncpy(host, parsed_host, MAX_EVENT_ORIGIN_SIZE);
+  host[MAX_EVENT_ORIGIN_SIZE - 1] = '\0';
+  snprintf(path, MAX_SSE_PATH_SIZE, (parsed_path[0] != '/') ? "/%s" : "%s", parsed_path);
+  path[MAX_SSE_PATH_SIZE - 1] = '\0';
+  port = parsed_port;
   secure = strncmp(url, "https://", 8) == 0;
 
   return true;
@@ -104,7 +109,9 @@ bool EventSource::_setURL(const char *url) {
   if (!parsed) return false;
 
   strncpy(_apiHost, host, sizeof(_apiHost));
+  _apiHost[sizeof(_apiHost) - 1] = '\0';
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
+  _ssePath[sizeof(_ssePath) - 1] = '\0';
   _apiPort = port;
   _secure = secure;
 
@@ -113,10 +120,16 @@ bool EventSource::_setURL(const char *url) {
 
 template <typename Opts>
 void EventSource::_init(const char *url, Opts options) {
+  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
+  char path[MAX_SSE_PATH_SIZE] = {0};  
+  uint16_t port = DEFAULT_PORT;
+  bool secure = false;
 
-  bool parsed = _setURL(url);
+  bool parsed = _parseURL(url, host, path, port, secure);
+  DEBUG_PRINTF("[SSE] Parsed URL: %s:%hu%s secure=%d\n", host, port, path, secure);
+
   if (parsed) {
-    _init(_apiHost, _ssePath, _apiPort, options, _secure);
+    _init(host, path, port, options, secure);
   } 
 }
 
@@ -126,10 +139,8 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
 
   if constexpr (is_string_host_v<Host>) {
     strncpy(_apiHost, host, sizeof(_apiHost));
-    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else if constexpr (is_ip_host_v<Host>) {
     strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
-    _apiHost[sizeof(_apiHost) - 1] = '\0';
   } else {
     DEBUG_PRINTLN("Invalid host type");
     return;
@@ -146,7 +157,7 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
     DEBUG_PRINTLN("Invalid options type");
     return;
   }
-
+  
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
 
@@ -168,6 +179,8 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   _lock_queue = false;
   _eventHandlerCount = 0;
   _timeout = DEFAULT_TIMEOUT * 1000;
+  _force_connect = true;
+  _force_disconnect = false;
 
   _client->setRxTimeout(_timeout);
 
@@ -176,7 +189,7 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   //   xTaskCreate([](void *arg) {
   //     EventSource *source = static_cast<EventSource *>(arg);
   //     while (true) {
-  //        std::printf("[SSE] EventSourceTask running\n");
+  //        DEBUG_PRINTF("[SSE] EventSourceTask running\n");
   //       source->_update();
   //       vTaskDelay(10 / portTICK_PERIOD_MS);
   //     }
@@ -199,8 +212,9 @@ void EventSource::update() { _update(); }
 
 void EventSource::_update() {
   static uint64_t lastQueueUpdate = 0;
-  static bool initial_conn = true;
-
+#ifdef DEBUG_EVENTSOURCE
+  static uint8_t prevReadyState = CONNECTING;
+#endif
   if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL) {
     _processQueue();
     lastQueueUpdate = millis();
@@ -213,16 +227,17 @@ void EventSource::_update() {
     return;
 
   if (_client->connected()) {
-    if ((millis() - _lastConnectionTime) > _timeout) {
-      DEBUG_PRINTLN("[SSE] Timeout");
+    if (_force_disconnect || (millis() - _lastConnectionTime) > _timeout) {
+      std::printf("[SSE] Timeout");
       _lastConnectionTime = millis();
+      _force_disconnect = false;
       _client->close();
     }
-  } else if (initial_conn || (millis() - _lastConnectionTime) >
+  } else if (_force_connect || (millis() - _lastConnectionTime) >
                                  _retryDelay * _retryDelayMultiplier) {
     DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
                  millis() - _lastConnectionTime);
-    initial_conn = false;
+    _force_connect = false;
     _connect();
   }
 }
@@ -376,26 +391,24 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
   size_t body_len = len;
 
   if (_readyState == CONNECTING) {
-    DEBUG_PRINTLN("[SSE] Checking response headers");
+    // Handle redirection
     int statusCode = -1;
-    bool valid = _isResponseValidEventStream(body_start, len, statusCode);
-    DEBUG_PRINTF(
-        "[SSE] Response headers checked: contentTypeOk=%d, statusCode=%d\n",
-        valid, statusCode);
-    if (!valid) {
-      DEBUG_PRINTLN("[SSE] Content-Type: text/event-stream not found");
-      _onError(client, ERR_SERVER_INVALID_CONTENT_TYPE,
-               "Content-Type: text/event-stream not found");
+    bool hasStatusCode = _getStatusCode(body_start, len, statusCode);
+
+    if (!hasStatusCode) {
+      DEBUG_PRINTF("[SSE] HTTP status code not 200: %d\n", statusCode);
+      _onError(client, statusCode, "Invalid HTTP status code");
       return;
     }
-    // Handle redirection
-    else if (_is_permanent_redirection(statusCode) || _is_temporary_redirection(statusCode)) {
-      DEBUG_PRINTF("[SSE] Redirection %d\n", statusCode);
-      _client->close();
+    
+    if (_is_redirection(statusCode)) {
+
       bool ok = _handleRedirection(body_start, len, statusCode);
 
       if (!ok) {
         DEBUG_PRINTLN("[SSE] Location header not found");
+        // DO WE CLOSE THE EVENTSOURCE CONNECTION HERE OR NOT?
+        _client->close();
         _onError(
             client, ERR_REDIRECT_LOCATION,
             "Invalid Location header");
@@ -406,7 +419,21 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
     // https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
     // Otherwise, if res's status is not 200, or if res's `Content-Type` is not
     // `text/event-stream`, then fail the connection.
-    else if (statusCode != 200) {
+    else if (statusCode == 200) {
+      DEBUG_PRINTLN("[SSE] Checking response headers");
+      bool valid = _hasHeader(body_start, len, "Content-Type", "text/event-stream");
+
+      DEBUG_PRINTF(
+          "[SSE] Response headers checked: contentTypeOk=%d, statusCode=%d\n",
+          valid, statusCode);
+
+      if (!valid) {
+        DEBUG_PRINTLN("[SSE] Content-Type: text/event-stream not found");
+        _onError(client, ERR_SERVER_INVALID_CONTENT_TYPE,
+                 "Content-Type: text/event-stream not found");
+        return;
+      }
+    } else {
       DEBUG_PRINTF("[SSE] HTTP status code not 200: %d\n", statusCode);
       _onError(client, statusCode, "HTTP status code not 200");
       return;
@@ -432,43 +459,37 @@ void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
   }
 }
 
-bool EventSource::_is_permanent_redirection(int statusCode) {
-  return statusCode == 301 || statusCode == 308;
-}
-
-bool EventSource::_is_temporary_redirection(int statusCode) {
-  return statusCode == 307 || statusCode == 302;
+bool EventSource::_is_redirection(int statusCode) {
+  return statusCode >= 300 && statusCode < 400;
 }
 
 // TODO: Handle relative URL in Location header
 bool EventSource::_handleRedirection(char *data, size_t len, int statusCode) {
   DEBUG_PRINTLN("[SSE] Redirection");
   _readyState = CLOSED; // prevent automatic reconnection
-  _client->close();
   
   char new_url[MAX_EVENT_ORIGIN_SIZE + MAX_SSE_PATH_SIZE] = {0};
   bool found = _getHeaderValue(data, len, "Location", new_url);
 
   if (!found) return false;
 
-  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
-  char path[MAX_SSE_PATH_SIZE] = {0};
-  uint16_t port = DEFAULT_PORT;
-  bool secure = false;
+  if (new_url[0] == '/') {
+    strncpy(_ssePath, new_url, sizeof(_ssePath));
+    _ssePath[sizeof(_ssePath) - 1] = '\0';
+  } else {
+    char host[MAX_EVENT_ORIGIN_SIZE] = {0};
+    char path[MAX_SSE_PATH_SIZE] = {0};
+    uint16_t port = DEFAULT_PORT;
+    bool secure = false;
 
-  bool parsed = _parseURL(new_url, host, path, port, secure);
-  if (!parsed) return false;
-  
-  if (_is_permanent_redirection(statusCode)) {
-    DEBUG_PRINTF("[SSE] Permanent redirection to %s\n", new_url);
-    strncpy(_apiHost, host, sizeof(_apiHost));
-    snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
-    _apiPort = port;
-    _secure = secure;
+    bool parsed = _parseURL(new_url, host, path, port, secure);
+    if (!parsed) return false;
+    _setURL(new_url);
   }
 
+  _force_disconnect = true;
+  _force_connect = true;
   _readyState = CONNECTING;
-  _connect(host, path, port, secure);
 
   return true;
 }

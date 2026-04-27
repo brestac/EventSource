@@ -233,6 +233,8 @@ private:
   size_t _retryCount;
   size_t _retryDelayMultiplier;
   uint32_t _timeout;
+  bool _force_connect;
+  bool _force_disconnect;
 
   // Static callbacks
   static void _onConnectStatic(void *arg, AsyncClient *client);
@@ -265,9 +267,7 @@ private:
   void _disconnect();
   bool _is_abort_error(int code);
   bool _handleRedirection(char *data, size_t len, int statusCode);
-  bool _is_permanent_redirection(int statusCode);
-  bool _is_temporary_redirection(int statusCode);
-  bool _isResponseValidEventStream(const char *data, size_t len, int &statusCode);
+  bool _is_redirection(int statusCode);
   bool _getHeaderValue(const char *data, size_t len, const char *header_name, char *header_value);
   bool _hasHeader(const char *data, size_t len, const char *header_name, const char *header_value);
   bool _getStatusCode(const char *data, size_t len, int &statusCode);
