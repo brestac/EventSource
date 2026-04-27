@@ -199,6 +199,8 @@ public:
     return url;
   }
 
+  AsyncClient *client() const { return _client; }
+
 private:
   template <size_t N, typename Value> struct KeyValuePair {
     char key[N];
