@@ -309,24 +309,63 @@ void EventSource::_onDisconnect(AsyncClient *client) {
   DEBUG_PRINTF("onDisconnect _readyState=%hhu\n", _readyState);
 }
 
-bool EventSource::_isResponseValidEventStream(const char *data, size_t len,
-                                              int &statusCode) {
-
+bool EventSource::_getStatusCode(const char *data, size_t len, int &statusCode) {
   int code = -1;
   size_t n = sscanf(data, "HTTP/%*f %d", &code);
-  if (n == 1) {
-    statusCode = code;
+  if (n == 0) return false;
+  
+  statusCode = code;
+  
+  DEBUG_PRINTF("[SSE] statusCode=%d\n", statusCode);
+  return true;
+}
+
+bool EventSource::_getHeaderValue(const char *data, size_t len, const char *header_name, char *header_value) {
+  // To do this properly, we need to parse the HTTP headers line by line until we find the one we want or reach the end of the headers.
+
+  // Find the start of the headers
+  const char *headers_start = strstr(data, "\r\n");
+  if (headers_start == nullptr) {
+    DEBUG_PRINTLN("[SSE] Headers not found");
+    return false;
+  }
+  headers_start += 2;
+
+  // Find the end of the headers
+  const char *headers_end = strstr(headers_start, "\r\n\r\n");
+  if (headers_end == nullptr) {
+    DEBUG_PRINTLN("[SSE] Headers end not found");
+    return false;
   }
 
-  char contentTypeValue[MAX_HEADER_VALUE_SIZE] = {0};
-  bool hasContentType =
-      _getHeaderValue(data, len, "Content-Type", contentTypeValue);
+  // Search for the header
+  const char *header_start = headers_start;
+  while (header_start < headers_end) {
+    const char *header_end = strstr(header_start, "\r\n");
+    if (header_end == nullptr) {
+      header_end = headers_end;
+    }
 
-  bool valid = hasContentType &&
-               (strncmp(contentTypeValue, "text/event-stream", 16) == 0);
+    // Check if this is the header we're looking for
+    if (strncmp(header_start, header_name, strlen(header_name)) == 0) {
+      const char *value_start = header_start + strlen(header_name) + 2; // Skip ": "
+      size_t value_len = header_end - value_start;
+      strncpy(header_value, value_start, value_len);
+      header_value[value_len] = '\0';
+      return true;
+    }
 
-  DEBUG_PRINTF("[SSE] statusCode=%d '%s'\n", statusCode, contentTypeValue);
-  return valid;
+    header_start = header_end + 2;
+  }
+
+  DEBUG_PRINTF("[SSE] Header %s not found\n", header_name);
+  return false;
+}
+
+bool EventSource::_hasHeader(const char *data, size_t len, const char *header_name, const char *header_value) {
+  char parsedValue[MAX_HEADER_VALUE_SIZE] = {0};
+  _getHeaderValue(data, len, header_name, parsedValue);
+  return strcmp(parsedValue, header_value) == 0;
 }
 
 void EventSource::_onData(AsyncClient *client, void *data, size_t len) {

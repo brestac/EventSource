@@ -268,6 +268,9 @@ private:
   bool _is_permanent_redirection(int statusCode);
   bool _is_temporary_redirection(int statusCode);
   bool _isResponseValidEventStream(const char *data, size_t len, int &statusCode);
+  bool _getHeaderValue(const char *data, size_t len, const char *header_name, char *header_value);
+  bool _hasHeader(const char *data, size_t len, const char *header_name, const char *header_value);
+  bool _getStatusCode(const char *data, size_t len, int &statusCode);
   void _setLastEventId(const char *lastEventId);
   void _dispachEvent(Event &event);
   void _update();
