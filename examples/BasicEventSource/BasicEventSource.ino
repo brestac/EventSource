@@ -19,7 +19,7 @@
 #define WIFI_PASSWORD "YOUR_PASSWORD"
 
 // Change host and port to match your server setup.
-EventSource source("http://192.168.1.2:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
+EventSource source("http://0.0.0.0:5001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
 
 void setup() {
 
