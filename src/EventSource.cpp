@@ -703,9 +703,8 @@ void EventSource::close() {
 }
 
 void EventSource::reconnect() {
-  if (_readyState == CLOSED) {
-    _readyState = CONNECTING;
-  }
+  _force_disconnect = true;
+  _readyState = CONNECTING;
 }
 
 void EventSource::setRetryDelay(uint32_t retryDelay) {
