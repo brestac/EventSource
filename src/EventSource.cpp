@@ -4,9 +4,10 @@
 // #include <freertos/FreeRTOS.h>
 // #include <freertos/task.h>
 // #endif
+#if __cplusplus < 202002L
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-
+#endif
 template <typename T> struct is_char_array : std::false_type {};
 
 template <typename T, size_t N>
@@ -225,7 +226,12 @@ void EventSource::_update() {
 
   if (_readyState != CONNECTING)
     return;
-
+#ifdef DEBUG_EVENTSOURCE
+  if (prevReadyState != _readyState) {
+    DEBUG_PRINTF("[SSE] Ready state changed to %hhu\n", _readyState);
+    prevReadyState = _readyState;
+  }
+#endif
   if (_client->connected()) {
     if (_force_disconnect || (millis() - _lastConnectionTime) > _timeout) {
       std::printf("[SSE] Timeout");
