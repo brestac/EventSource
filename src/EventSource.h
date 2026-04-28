@@ -92,7 +92,7 @@ constexpr const char *DEFAULT_HEADERS = "Accept: text/event-stream\r\n"
 
 // ---------- free-function declarations ----------
 
-inline size_t linelen(const char *cstr, size_t max_len);
+inline size_t linelen(const char *cstr, const char* end);
 inline bool isdigits(const char *str);
 inline void _isResponseValidEventStream(const char *data, size_t len,
                                         bool &contentTypeOk, int &statusCode);
@@ -199,6 +199,8 @@ public:
     return url;
   }
 
+  AsyncClient *client() const { return _client; }
+
 private:
   template <size_t N, typename Value> struct KeyValuePair {
     char key[N];
@@ -231,6 +233,8 @@ private:
   size_t _retryCount;
   size_t _retryDelayMultiplier;
   uint32_t _timeout;
+  bool _force_connect;
+  bool _force_disconnect;
 
   // Static callbacks
   static void _onConnectStatic(void *arg, AsyncClient *client);
@@ -245,7 +249,8 @@ private:
   template <typename Host, typename Opts>
   void _init(Host host, const char *path, uint16_t port, const Opts &options,
              bool secure = false);
-  bool _parseUrl(const char *url);
+  bool _setURL(const char *url);
+  bool _parseURL(const char *url, char *host, char *path, uint16_t& port, bool& secure);
 
   void _onConnect(AsyncClient *client);
   void _onDisconnect(AsyncClient *client);
@@ -258,9 +263,13 @@ private:
                   const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();
+  void _connect(const char *host, const char *path, uint16_t port, bool secure);
   void _disconnect();
-  bool _handleRedirections(char *data, size_t len);
-  bool _isResponseValidEventStream(const char *data, size_t len, int &statusCode);
+  bool _is_abort_error(int code);
+  bool _handleRedirection(char *data, size_t len, int statusCode);
+  bool _is_redirection(int statusCode);
+  bool _hasHeader(const char *data, size_t len, const char *header_name, const char *header_value);
+  bool _getStatusCode(const char *data, size_t len, int &statusCode);
   void _setLastEventId(const char *lastEventId);
   void _dispachEvent(Event &event);
   void _update();
@@ -349,39 +358,31 @@ inline uint64_t millis() {
 
 // ---------- Parsing ----------
 
-inline size_t linelen(const char *cstr, size_t max_len) {
-  size_t len = 0;
-  while (len < max_len) {
-    if (cstr[len] == '\r' || cstr[len] == '\n')
+inline size_t linelen(const char *cstr, const char *end) {
+  size_t pos = 0;
+  size_t max_len = end - cstr;
+
+  while (pos < max_len) {
+    if (cstr[pos] == '\r' || cstr[pos] == '\n')
       break;
-    len++;
+      pos++;
   }
-  return len;
+  return pos;
 }
 
 inline bool scan_char(const char *pos, char chr, const char *end) {
   return (pos != nullptr && pos < end && *pos == chr);
 }
-// Scan a line and return the number of characters read. A line ends with \r\n
-// or \r or \n. Set the pos pointer to the start of the next line.
-inline size_t scan_line(const char *&pos, const char *end) {
-  if (pos == nullptr || pos >= end)
-    return 0;
 
-  size_t len = linelen(pos, end - pos);
-
-  pos += len;
-
+inline void skip_eol(const char *&pos, const char *end) {
   if (scan_char(pos, '\r', end)) {
     pos++;
     if (scan_char(pos, '\n', end)) {
-      pos++;
+        pos++;
     }
   } else if (scan_char(pos, '\n', end)) {
     pos++;
   }
-
-  return len;
 }
 
 template <size_t N>
@@ -420,22 +421,38 @@ inline bool _extractHeaderValue(const char *line_start, size_t line_len,
 }
 
 template <size_t N>
-inline bool _getHeaderValue(const char *data, size_t len,
+inline bool _getHeaderValue(const char *data, size_t data_len,
                             const char *header_name, char (&header_value)[N]) {
+  // Find the start of the headers
+  const char *headers_start = strstr(data, "\r\n");
+  if (headers_start == nullptr) {
+    DEBUG_PRINTLN("[SSE] Headers not found");
+    return false;
+  }
+  headers_start += 2;
+
+  // Find the end of the headers
+  const char *headers_end = strstr(headers_start, "\r\n\r\n");
+  if (headers_end == nullptr) {
+    DEBUG_PRINTLN("[SSE] Headers end not found");
+    return false;
+  }
+
   const char *pos = data;
-  const char *end = data + len;
 
   size_t it = 0;
-  while (pos < end && it < MAX_RESPONSE_LINES) {
-    const char *line_start = pos;
-    size_t line_len = scan_line(pos, end);
-    DEBUG_PRINTF("[EventSource] Line %zu: '%.*s'\n", it, (int)line_len,
-                 line_start);
-    if (_extractHeaderValue(line_start, line_len, header_name, header_value)) {
+  while (pos < headers_end && it < MAX_RESPONSE_LINES) {
+    size_t line_len = linelen(pos, headers_end);
+    
+    DEBUG_PRINTF("[EventSource] Line %zu: '%.*s'\n", it, (int)line_len, pos);
+    if (_extractHeaderValue(pos, line_len, header_name, header_value)) {
       DEBUG_PRINTF("[EventSource] Found header '%s' with value '%s'\n",
                    header_name, header_value);
       return true;
     }
+    
+    pos += line_len;
+    skip_eol(pos, headers_end);
     it++;
   }
 

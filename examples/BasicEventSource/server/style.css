@@ -1,0 +1,258 @@
+*,
+*::after,
+*::before {
+  box-sizing: border-box;
+  margin    : 0;
+  padding   : 0;
+}
+
+body {
+  font-family   : 'Courier New', monospace;
+  background    : #0d1117;
+  color         : #c9d1d9;
+  min-height    : 100vh;
+  display       : flex;
+  flex-direction: column;
+  padding       : 1.5rem;
+  gap           : 1.2rem;
+}
+
+h1 {
+  color         : #58a6ff;
+  font-size     : 1.4rem;
+  letter-spacing: 0.05em;
+}
+
+h2 {
+  color         : #8b949e;
+  font-size     : 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom : 0.6rem;
+}
+
+.card {
+  background   : #161b22;
+  border       : 1px solid #30363d;
+  border-radius: 8px;
+  padding      : 1.1rem 1.4rem;
+}
+/* ── Controls row ── */
+.controls {
+  display    : flex;
+  flex-wrap  : wrap;
+  gap        : 1rem;
+  align-items: flex-start;
+}
+
+.control-group {
+  display       : flex;
+  flex-direction: column;
+  gap           : 0.35rem;
+}
+
+label {
+  font-size     : 0.75rem;
+  color         : #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+button {
+  font-family  : inherit;
+  font-size    : 0.85rem;
+  padding      : 0.45rem 1.1rem;
+  border       : none;
+  border-radius: 5px;
+  cursor       : pointer;
+  font-weight  : bold;
+  transition   : opacity 0.15s;
+}
+
+button:hover {
+  opacity: 0.85;
+}
+
+.btn-start {
+  background: #238636;
+  color     : #fff;
+}
+
+.btn-stop {
+  background: #da3633;
+  color     : #fff;
+}
+
+.btn-disabled {
+  background: #30363d;
+  color     : #8b949e;
+  cursor    : not-allowed;
+  opacity   : 0.6;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  font-family  : inherit;
+  font-size    : 0.85rem;
+  background   : #0d1117;
+  color        : #c9d1d9;
+  border       : 1px solid #30363d;
+  border-radius: 5px;
+  padding      : 0.4rem 0.6rem;
+}
+
+input:focus,
+select:focus {
+  outline       : 2px solid #58a6ff;
+  outline-offset: 1px;
+}
+
+input[type="number"] {
+  width: 110px;
+}
+
+input[type="text"] {
+  width: 200px;
+}
+/* ── Status indicator ── */
+.status-row {
+  display  : flex;
+  gap      : 1.5rem;
+  flex-wrap: wrap;
+}
+
+.indicator {
+  display    : flex;
+  align-items: center;
+  gap        : 0.45rem;
+  font-size  : 0.85rem;
+}
+
+.status {
+  width        : 10px;
+  height       : 10px;
+  border-radius: 50%;
+  background   : #30363d;
+  transition   : background 0.3s;
+}
+
+.status.on {
+  background: #3fb950;
+  box-shadow: 0 0 6px #3fb950;
+}
+
+.status.err {
+  background: #f85149;
+  box-shadow: 0 0 6px #f85149;
+}
+/* ── Location field ── */
+#location-row {
+  display    : flex;
+  align-items: center;
+  gap        : 0.6rem;
+  margin-top : 0.4rem;
+}
+
+#location-row.hidden {
+  display: none;
+}
+/* ── Console ── */
+#console {
+  flex           : 1;
+  min-height     : 220px;
+  max-height     : 380px;
+  overflow-y     : auto;
+  background     : #0d1117;
+  border         : 1px solid #30363d;
+  border-radius  : 6px;
+  padding        : 0.7rem 1rem;
+  font-size      : 0.8rem;
+  line-height    : 1.55;
+  scroll-behavior: smooth;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break : break-all;
+}
+
+.log-open {
+  color: #3fb950;
+}
+
+.log-event {
+  color: #58a6ff;
+}
+
+.log-message {
+  color: #e3b341;
+}
+
+.log-error {
+  color: #f85149;
+}
+
+.log-server {
+  color: #8b949e;
+}
+
+.log-comment {
+  color     : #6e7681;
+  font-style: italic;
+}
+
+.console-toolbar {
+  display        : flex;
+  justify-content: space-between;
+  align-items    : center;
+  margin-bottom  : 0.5rem;
+}
+
+.btn-clear {
+  font-size    : 0.75rem;
+  padding      : 0.25rem 0.7rem;
+  background   : #21262d;
+  color        : #8b949e;
+  border       : 1px solid #30363d;
+  border-radius: 4px;
+}
+/* ── Stepper ── */
+.stepper {
+  display    : flex;
+  align-items: center;
+  gap        : 0;
+}
+
+.stepper button {
+  width        : 28px;
+  font-size    : 1rem;
+  padding      : 0.35rem 0;
+  border-radius: 0;
+  background   : #21262d;
+  color        : #c9d1d9;
+  border       : 1px solid #30363d;
+}
+
+.stepper button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.stepper button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.stepper input {
+  width        : 80px;
+  text-align   : center;
+  border-radius: 0;
+  border-left  : none;
+  border-right : none;
+}
+
+.sep {
+  width     : 1px;
+  background: #30363d;
+  align-self: stretch;
+  margin    : 0 0.5rem;
+}

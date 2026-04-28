@@ -8,10 +8,12 @@ The public API mirrors the [W3C EventSource interface](https://developer.mozilla
 
 ## Features
 - Conforms to the [SSE (Server-Sent Events)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) specification
-- Auto-reconnect with configurable delay
-- Custom HTTP headers
-- `Last-Event-ID` resumption
 - Multiple event-type handlers (`message`, `open`, `close`, `error`, `custom_event`)
+- Support for id, retry, comment fields in event stream
+## Additional Features
+- Custom HTTP headers
+- Set the default retry delay
+- Force a reconnection in error listener
 - Non-blocking — runs entirely on ESPAsyncTCP callbacks
 
 ---
@@ -69,10 +71,9 @@ void loop() {
 
 ```cpp
 EventSource(const char *url);
-EventSource(const char *url, Options options);
-EventSource(const char *url, HeadersMap headers);
-EventSource(const char * host, const char *path, uint_16_t port, Options options = Options());
-EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Options());
+EventSource(const char *url, Options& options);
+EventSource(const char * host, const char *path, uint_16_t port, Options& options = Options());
+EventSource(IPAdress& ip, const char *path, uint_16_t port, Options& options = Options());
 ```
 
 ### Options
@@ -87,12 +88,13 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options options = Op
 | Method | Description | Default |
 |--------|-------------|---------|
 | `addEventListener(type, handler)` | Register a callback for an event type | - |
+| `close()` | Close the connection permanently | - |
+| `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) | - |
 | `addHeader(name, value)` | Add a custom HTTP header | - |
 | `reconnect()` | Reconnect when the readyState is CLOSED, for example after a server response not OK | - |
 | `setRetryDelay(ms)` | Change default reconnect delay in ms at runtime. May be overriden by sse retry field | 3000ms |
 | `setTimeout(s)` | The timeout for the connection in seconds | 20s |
-| `close()` | Close the connection permanently | - |
-| `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) | - |
+| `update()` | Required in the loop(). Processes event queue and automatic reconnection | - |
 
 ### Event structure
 
@@ -104,7 +106,7 @@ struct Event {
     char lastEventId[128]; // id field from the stream (data events only)
     char data[1024];       // event payload (data events only)
     char message[256];     // error message (error events only)
-    int  code;             // error code    (error events only)
+    int  code;             // error code    (error events only, see below)
 };
 ```
 
@@ -126,13 +128,15 @@ struct Event {
 |104|ERR_SERVER_INVALID_CONTENT_TYPE|Content-Type is not text/event-stream.|
 |201-599|INVALID_STATUS|Invalid HTTP status code response (not 200 and not 301).|
 
-Note: In 'error' event listener, you can force a reconnection with the non-normative reconnect() function.
+Note: These errors will cause a permanent deconnection (readyState == CLOSED)
+You can force a reconnection with the non-normative reconnect() function.
+
 
 ---
 
 ## Server example (Node.js)
 
-See [`examples/BasicEventSource/server/`](examples/BasicEventSource/server/) for a minimal Express SSE server used for testing.
+See [`examples/BasicEventSource/server/`](examples/BasicEventSource/server/) for an Express SSE server used for testing.
 
 Install:
 
