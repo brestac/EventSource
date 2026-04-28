@@ -41,7 +41,6 @@ const io = new SocketIOServer(htmlServer, {
     cors: { origin: "*" },
 });
 
-let blocking_timeout = null;
 
 // ── Shared SSE route handler (mounted on both servers) ────────────────────
 async function sseHandler(req, res) {
@@ -66,7 +65,7 @@ async function sseHandler(req, res) {
     }
 
     if (state.sleep) {
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         const start = new Date();
         const timer = setInterval(() => {
           if (state.sleep == false || (new Date() - start) > SERVER_BLOCKED_DELAY) {
@@ -201,10 +200,6 @@ io.on("connection", (socket) => {
 
     socket.on("disable-sse-sleep", () => {
         state.sleep = false;
-        if (blocking_timeout) {
-          clearInterval(blocking_timeout);
-          blocking_timeout = null;
-        }
         io.emit("state", state);
     });
 
