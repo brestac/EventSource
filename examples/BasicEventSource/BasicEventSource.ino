@@ -13,10 +13,10 @@
 // #define DEBUG_EVENTSOURCE 1
 
 #include <ESP8266WiFi.h>
-#include "EventSource.h"
+#include <EventSource.h>
 
-#define WIFI_SSID "wifix"
-#define WIFI_PASSWORD "rosebude"
+#define WIFI_SSID "YOUR_SSID"
+#define WIFI_PASSWORD "YOUR_PASSWORD"
 
 EventSource source("http://0.0.0.0:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
 
