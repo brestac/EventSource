@@ -128,8 +128,9 @@ struct Event {
 |104|ERR_SERVER_INVALID_CONTENT_TYPE|Content-Type is not text/event-stream.|
 |201-599|INVALID_STATUS|Invalid HTTP status code response (not 200 and not 301).|
 
-Note: These errors will cause a permanent deconnection (readyState -- CLOSED)
+Note: These errors will cause a permanent deconnection (readyState == CLOSED)
 You can force a reconnection with the non-normative reconnect() function.
+
 
 ---
 
