@@ -374,7 +374,7 @@ inline bool scan_char(const char *pos, char chr, const char *end) {
   return (pos != nullptr && pos < end && *pos == chr);
 }
 
-inline void skip_eol(const char *pos, const char *end) {
+inline void skip_eol(const char *&pos, const char *end) {
   if (scan_char(pos, '\r', end)) {
     pos++;
     if (scan_char(pos, '\n', end)) {
@@ -450,7 +450,8 @@ inline bool _getHeaderValue(const char *data, size_t data_len,
                    header_name, header_value);
       return true;
     }
-
+    
+    pos += line_len;
     skip_eol(pos, headers_end);
     it++;
   }

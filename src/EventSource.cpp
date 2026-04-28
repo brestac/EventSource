@@ -732,7 +732,8 @@ void EventSource::_parse_event_stream(const char *cstr, size_t len) {
         break;
       }
     }
-
+    
+    pos += line_len;
     skip_eol(pos, end);
     lines_count++;
   }
