@@ -342,52 +342,10 @@ bool EventSource::_getStatusCode(const char *data, size_t len, int &statusCode) 
   return true;
 }
 
-bool EventSource::_getHeaderValue(const char *data, size_t len, const char *header_name, char *header_value) {
-  // To do this properly, we need to parse the HTTP headers line by line until we find the one we want or reach the end of the headers.
-
-  // Find the start of the headers
-  const char *headers_start = strstr(data, "\r\n");
-  if (headers_start == nullptr) {
-    DEBUG_PRINTLN("[SSE] Headers not found");
-    return false;
-  }
-  headers_start += 2;
-
-  // Find the end of the headers
-  const char *headers_end = strstr(headers_start, "\r\n\r\n");
-  if (headers_end == nullptr) {
-    DEBUG_PRINTLN("[SSE] Headers end not found");
-    return false;
-  }
-
-  // Search for the header
-  const char *header_start = headers_start;
-  while (header_start < headers_end) {
-    const char *header_end = strstr(header_start, "\r\n");
-    if (header_end == nullptr) {
-      header_end = headers_end;
-    }
-
-    // Check if this is the header we're looking for
-    if (strncmp(header_start, header_name, strlen(header_name)) == 0) {
-      const char *value_start = header_start + strlen(header_name) + 2; // Skip ": "
-      size_t value_len = header_end - value_start;
-      strncpy(header_value, value_start, value_len);
-      header_value[value_len] = '\0';
-      return true;
-    }
-
-    header_start = header_end + 2;
-  }
-
-  DEBUG_PRINTF("[SSE] Header %s not found\n", header_name);
-  return false;
-}
-
 bool EventSource::_hasHeader(const char *data, size_t len, const char *header_name, const char *header_value) {
   char parsedValue[MAX_HEADER_VALUE_SIZE] = {0};
-  _getHeaderValue(data, len, header_name, parsedValue);
-  return strcmp(parsedValue, header_value) == 0;
+  bool found = _getHeaderValue(data, len, header_name, parsedValue);
+  return found && strcmp(parsedValue, header_value) == 0;
 }
 
 void EventSource::_onData(AsyncClient *client, void *data, size_t len) {
@@ -762,11 +720,10 @@ void EventSource::_parse_event_stream(const char *cstr, size_t len) {
   Event *event = &_dispachQueue[queueSlot];
 
   while (pos < end && lines_count <= MAX_EVENT_LINES) {
-    const char *line_start = pos;
-    size_t line_len = scan_line(pos, end);
-    bool dispatched = _process_line(line_start, line_len, *event);
+    size_t line_len = linelen(pos, end);
+    bool should_dispach = _process_line(pos, line_len, *event);
 
-    if (dispatched) {
+    if (should_dispach) {
       queueSlot = _dispachQueueSize;
       if (queueSlot < MAX_DISPACH_QUEUE_SIZE) {
         _dispachQueue[queueSlot] = _newMessageEvent();
@@ -776,23 +733,28 @@ void EventSource::_parse_event_stream(const char *cstr, size_t len) {
       }
     }
 
+    skip_eol(pos, end);
     lines_count++;
   }
 }
 
 bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
   DEBUG_PRINTF("Process line: '%.*s' len=%zu\n", (int)len, cstr, len);
-
+  static bool is_empty_line = false;
+  
   if (len == 0) {
     DEBUG_PRINT("Empty line, ");
-    if (event._hasData) {
+    if (!is_empty_line && event._hasData) {
       DEBUG_PRINTLN("Enqueuing data event");
       _addToQueue(event);
+      is_empty_line = true;
       return true;
     }
-    DEBUG_PRINTLN("no data to enqueue");
+    DEBUG_PRINTLN("no data to enqueue or already empty line");
     return false;
   }
+
+  is_empty_line = false;
 
   if (cstr[0] == ':') {
     DEBUG_PRINTLN("Ignoring comment line");
