@@ -7,10 +7,11 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const HTML_HOST = "0.0.0.0";
-const HTML_PORT = 5000;
-const SSE_HOST = "0.0.0.0";
-const SSE_PORT = 5001;
+const HTML_HOST = process.env.HTML_HOST;
+const HTML_PORT = process.env.HTML_PORT;
+const SSE_HOST = process.env.SSE_HOST;
+const SSE_PORT = process.env.SSE_PORT;
+const SERVER_BLOCKED_DELAY = 30 * 60 * 1000; // 30mn
 
 // ── State ──────────────────────────────────────────────────────────────────
 const state = {
@@ -21,7 +22,7 @@ const state = {
     retry: 3000,
     data: "Hello from SERVER",
     intervalMs: 3000,
-    sleep: 0
+    sleep: false
 };
 
 // Active SSE clients: Map<res, intervalId>
@@ -40,91 +41,7 @@ const io = new SocketIOServer(htmlServer, {
     cors: { origin: "*" },
 });
 
-io.on("connection", (socket) => {
-    console.log("Control client connected:", socket.id);
-
-    // Send current state immediately on connect
-    socket.emit("state", state);
-
-    socket.on("start-sse", () => {
-        state.sseRunning = true;
-        console.log("SSE server started");
-        io.emit("state", state);
-    });
-
-    socket.on("stop-sse", () => {
-        state.sseRunning = false;
-        // Close all active SSE connections
-        for (const [clientRes, intervalId] of sseClients) {
-            clearInterval(intervalId);
-            try {
-                clientRes.end();
-            } catch (_) {}
-        }
-        sseClients.clear();
-        console.log("SSE server stopped — all clients disconnected");
-        io.emit("state", state);
-    });
-
-    socket.on("start-stream", () => {
-        state.streamRunning = true;
-        console.log("Stream events started");
-        // Restart intervals for all connected clients
-        for (const [clientRes, oldInterval] of sseClients) {
-            clearInterval(oldInterval);
-            const id = setInterval(
-                () => sendEvent(clientRes),
-                state.intervalMs,
-            );
-            sseClients.set(clientRes, id);
-        }
-        io.emit("state", state);
-    });
-
-    socket.on("stop-stream", () => {
-        state.streamRunning = false;
-        console.log("Stream events stopped");
-        // Clear intervals but keep connections alive
-        for (const [clientRes, intervalId] of sseClients) {
-            clearInterval(intervalId);
-            sseClients.set(clientRes, null);
-        }
-        io.emit("state", state);
-    });
-
-    socket.on("config", (cfg) => {
-        const intervalChanged =
-            cfg.intervalMs !== undefined && cfg.intervalMs !== state.intervalMs;
-
-        if (cfg.statusCode !== undefined) state.statusCode = cfg.statusCode;
-        if (cfg.locationHeader !== undefined)
-            state.locationHeader = cfg.locationHeader;
-        if (cfg.retry !== undefined) state.retry = cfg.retry;
-        if (cfg.data !== undefined) state.data = cfg.data;
-        if (cfg.intervalMs !== undefined) state.intervalMs = cfg.intervalMs;
-        if (cfg.sleep !== undefined) state.sleep = cfg.sleep;
-
-        console.log("Config updated:", state);
-
-        // If interval changed and streaming is active, restart intervals
-        if (intervalChanged && state.streamRunning) {
-            for (const [clientRes, oldInterval] of sseClients) {
-                clearInterval(oldInterval);
-                const id = setInterval(
-                    () => sendEvent(clientRes),
-                    state.intervalMs,
-                );
-                sseClients.set(clientRes, id);
-            }
-        }
-
-        io.emit("state", state);
-    });
-
-    socket.on("disconnect", () => {
-        console.log("Control client disconnected:", socket.id);
-    });
-});
+let blocking_timeout = null;
 
 // ── Shared SSE route handler (mounted on both servers) ────────────────────
 async function sseHandler(req, res) {
@@ -148,7 +65,17 @@ async function sseHandler(req, res) {
         return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, state.sleep * 1000));
+    if (state.sleep) {
+      await new Promise((resolve, reject) => {
+        const start = new Date();
+        const timer = setInterval(() => {
+          if (state.sleep == false || (new Date() - start) > SERVER_BLOCKED_DELAY) {
+            clearInterval(timer);
+            resolve(state.sleep);
+          }
+        }, 1000);
+      });
+    }
 
     // 200 — open SSE stream
     req.socket.setNoDelay(true);
@@ -207,8 +134,112 @@ sseApp.get("/redirect-events", async (req, res) => {
 });
 
 const sseServer = http.createServer(sseApp);
-sseServer.listen(SSE_PORT, SSE_HOST, () => {
-    console.log(`SSE  server listening on http://${SSE_HOST}:${SSE_PORT}`);
+
+
+io.on("connection", (socket) => {
+    console.log("Control client connected:", socket.id);
+
+    // Send current state immediately on connect
+    socket.emit("state", state);
+
+    socket.on("start-sse", () => {
+      sseServer.listen(SSE_PORT, SSE_HOST, () => {
+          console.log(`SSE  server listening on http://${SSE_HOST}:${SSE_PORT}`);
+          state.sseRunning = true;
+
+          io.emit("state", state);
+      });
+    });
+
+    socket.on("stop-sse", () => {
+        // Close all active SSE connections
+        for (const [clientRes, intervalId] of sseClients) {
+            clearInterval(intervalId);
+            try {
+                clientRes.end();
+            } catch (_) {}
+        }
+        sseClients.clear();
+
+        sseServer.close(() => {
+          state.sseRunning = false;
+          console.log("SSE server stopped — all clients disconnected");
+          io.emit("state", state);
+        });
+    });
+
+    socket.on("start-stream", () => {
+        state.streamRunning = true;
+        console.log("Stream events started");
+        // Restart intervals for all connected clients
+        for (const [clientRes, oldInterval] of sseClients) {
+            clearInterval(oldInterval);
+            const id = setInterval(
+                () => sendEvent(clientRes),
+                state.intervalMs,
+            );
+            sseClients.set(clientRes, id);
+        }
+        io.emit("state", state);
+    });
+
+    socket.on("stop-stream", () => {
+        state.streamRunning = false;
+        console.log("Stream events stopped");
+        // Clear intervals but keep connections alive
+        for (const [clientRes, intervalId] of sseClients) {
+            clearInterval(intervalId);
+            sseClients.set(clientRes, null);
+        }
+        io.emit("state", state);
+    });
+
+    socket.on("enable-sse-sleep", () => {
+        state.sleep = true;
+        io.emit("state", state);
+    });
+
+    socket.on("disable-sse-sleep", () => {
+        state.sleep = false;
+        if (blocking_timeout) {
+          clearInterval(blocking_timeout);
+          blocking_timeout = null;
+        }
+        io.emit("state", state);
+    });
+
+    socket.on("config", (cfg) => {
+        const intervalChanged =
+            cfg.intervalMs !== undefined && cfg.intervalMs !== state.intervalMs;
+
+        if (cfg.statusCode !== undefined) state.statusCode = cfg.statusCode;
+        if (cfg.locationHeader !== undefined)
+            state.locationHeader = cfg.locationHeader;
+        if (cfg.retry !== undefined) state.retry = cfg.retry;
+        if (cfg.data !== undefined) state.data = cfg.data;
+        if (cfg.intervalMs !== undefined) state.intervalMs = cfg.intervalMs;
+        if (cfg.sleep !== undefined) state.sleep = cfg.sleep;
+
+        console.log("Config updated:", state);
+
+        // If interval changed and streaming is active, restart intervals
+        if (intervalChanged && state.streamRunning) {
+            for (const [clientRes, oldInterval] of sseClients) {
+                clearInterval(oldInterval);
+                const id = setInterval(
+                    () => sendEvent(clientRes),
+                    state.intervalMs,
+                );
+                sseClients.set(clientRes, id);
+            }
+        }
+
+        io.emit("state", state);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("Control client disconnected:", socket.id);
+    });
 });
 
 // ── SSE event sender ──────────────────────────────────────────────────────
@@ -232,3 +263,16 @@ function sendEvent(clientRes) {
         console.error("Error writing to SSE client:", err.message);
     }
 }
+
+const close_all = () => {
+  console.log('SIGTERM signal received.');
+  sseServer.close(() => {
+    console.log('Closed out remaining connections');
+    // Additional cleanup tasks go here, e.g., close database connection
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', close_all);
+
+process.on('SIGINT', close_all);

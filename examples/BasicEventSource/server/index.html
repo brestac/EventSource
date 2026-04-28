@@ -1,390 +1,359 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>ESP8266 EventSource Server</title>
-        <script src="/socket.io/socket.io.js"></script>
-        <link rel="stylesheet" href="/style.css" />
-    </head>
-    <body>
-        <h1>EventSource Server</h1>
 
-        <!-- ── Status ─────────────────────────────────────────────────── -->
-        <div class="card">
-            <h2>Status</h2>
-            <div class="status-row">
-                <div class="indicator">
-                    <div class="dot" id="dot-sse"></div>
-                    <span id="label-sse">SSE Server: Stopped</span>
-                </div>
-                <div class="indicator">
-                    <div class="dot" id="dot-stream"></div>
-                    <span id="label-stream">Stream Events: Stopped</span>
-                </div>
-                <div class="indicator">
-                    <div class="dot" id="dot-es"></div>
-                    <span id="label-es">EventSource: Disconnected</span>
-                </div>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP8266 EventSource Server</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+    <h1>EventSource Server</h1>
+
+    <!-- ── Status ─────────────────────────────────────────────────── -->
+    <div class="card">
+        <h2>Status</h2>
+        <div class="status-row">
+            <div class="indicator">
+                <div class="status" id="status-sse"></div>
+                <span id="label-sse">SSE Server: Stopped</span>
+            </div>
+            <div class="indicator">
+                <div class="status" id="status-stream"></div>
+                <span id="label-stream">Stream Events: Stopped</span>
+            </div>
+            <div class="indicator">
+                <div class="status" id="status-es"></div>
+                <span id="label-es">SSE Client: Disconnected</span>
             </div>
         </div>
+    </div>
 
-        <!-- ── Configuration ──────────────────────────────────────────── -->
-        <div class="card">
-            <h2>Configuration</h2>
-            <div class="controls">
-                <!-- SSE Server toggle -->
-                <div class="control-group">
-                    <label>SSE Server</label>
-                    <button
-                        id="btn-sse"
-                        class="btn-start"
-                        onclick="toggleSSE()"
-                    >
-                        START
-                    </button>
-                </div>
-
-                <div class="sep"></div>
-
-                <!-- Stream events toggle -->
-                <div class="control-group">
-                    <label>Stream Events</label>
-                    <button
-                        id="btn-stream"
-                        class="btn-start"
-                        onclick="toggleStream()"
-                    >
-                        START
-                    </button>
-                </div>
-
-                <div class="sep"></div>
-
-                <!-- Status code -->
-                <div class="control-group">
-                    <label>Response Status</label>
-                    <select id="sel-status" onchange="onStatusChange()">
-                        <option value="200">200 OK</option>
-                        <option value="301">301 Moved Permanently</option>
-                        <option value="307">307 Temporary Redirect</option>
-                        <option value="450">450 User Defined</option>
-                        <option value="500">500 Internal Server Error</option>
-                    </select>
-                    <div id="location-row" class="hidden">
-                        <label>Location</label>
-                        <input
-                            type="text"
-                            id="inp-location"
-                            placeholder="/events"
-                            oninput="sendConfig()"
-                        />
-                    </div>
-                </div>
-
-                <div class="sep"></div>
-
-                <!-- Retry -->
-                <div class="control-group">
-                    <label>Retry (ms)</label>
-                    <input
-                        type="number"
-                        id="inp-retry"
-                        value="3000"
-                        min="100"
-                        step="100"
-                        oninput="sendConfig()"
-                    />
-                </div>
-
-                <!-- Data -->
-                <div class="control-group">
-                    <label>Event Data</label>
-                    <input
-                        type="text"
-                        id="inp-data"
-                        value="Hello from ESP8266"
-                        oninput="sendConfig()"
-                    />
-                </div>
-
-                <!-- Interval stepper -->
-                <div class="control-group">
-                    <label>Send Interval (ms)</label>
-                    <div class="stepper">
-                        <button onclick="stepInterval(-500)">−</button>
-                        <input
-                            type="number"
-                            id="inp-interval"
-                            value="3000"
-                            min="100"
-                            step="100"
-                            oninput="sendConfig()"
-                        />
-                        <button onclick="stepInterval(500)">+</button>
-                    </div>
-                </div>
-                <!-- Sleep stepper -->
-                <div class="control-group">
-                    <label>Sleep (s)</label>
-                    <div class="stepper">
-                        <button onclick="stepSleep(-1)">−</button>
-                        <input
-                            type="number"
-                            id="inp-sleep"
-                            value="0"
-                            min="0"
-                            step="1"
-                            oninput="sendConfig()"
-                        />
-                        <button onclick="stepSleep(1)">+</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── EventSource Console ────────────────────────────────────── -->
-        <div
-            class="card"
-            style="flex: 1; display: flex; flex-direction: column"
-        >
-            <div class="console-toolbar">
-                <h2 style="margin: 0">EventSource Console</h2>
-                <button class="btn-clear" onclick="clearConsole()">
-                    Clear
+    <!-- ── Server ──────────────────────────────────────────── -->
+    <div class="card">
+        <h2>Server Configuration</h2>
+        <div class="controls">
+            <!-- SSE Server toggle -->
+            <div class="control-group">
+                <label>SSE Server</label>
+                <button id="btn-sse" class="btn-start" onclick="toggleSSE()">
+                    START
                 </button>
             </div>
-            <div id="console">
-                <span class="log-server">— Waiting for connection —</span>
+
+            <div class="sep"></div>
+
+            <!-- Status code -->
+            <div class="control-group">
+                <label>Response Status</label>
+                <select id="sel-status" onchange="onStatusChange()">
+                    <option value="200">200 OK</option>
+                    <option value="301">301 Moved Permanently</option>
+                    <option value="307">307 Temporary Redirect</option>
+                    <option value="450">450 User Defined</option>
+                    <option value="500">500 Internal Server Error</option>
+                </select>
+                <div id="location-row" class="hidden">
+                    <label>Location</label>
+                    <input type="text" id="inp-location" placeholder="/events" oninput="sendConfig()" />
+                </div>
             </div>
+
+            <div class="sep"></div>
+
+            <div class="sep"></div>
+
+            <!-- Toogle Sleep -->
+            <div class="control-group">
+                <label>BLOCK RESPONSE</label>
+                <button id="btn-sse-sleep" class="btn-start" onclick="toggleSleep()">
+                </button>
+            </div>
+
         </div>
+    </div>
 
-        <script>
-            // ── socket.io ──────────────────────────────────────────────────────────
-            const socket = io();
+    <!-- ── Event Stream ──────────────────────────────────────────── -->
+    <div class="card">
+        <h2>Event Stream</h2>
+        <div class="controls">
+            <!-- Stream events toggle -->
+            <div class="control-group">
+                <label>Stream Events</label>
+                <button id="btn-stream" class="btn-start" onclick="toggleStream()">
+                    START
+                </button>
+            </div>
 
-            socket.on("connect", () =>
-                logLine("server", "[socket.io] Connected to control server"),
-            );
-            socket.on("disconnect", () =>
+            <div class="sep"></div>
+
+            <!-- Interval stepper -->
+            <div class="control-group">
+                <label>Send Interval (ms)</label>
+                <div class="stepper">
+                    <button onclick="stepInterval(-500)">−</button>
+                    <input type="number" id="inp-interval" value="3000" min="100" step="100" oninput="sendConfig()" />
+                    <button onclick="stepInterval(500)">+</button>
+                </div>
+            </div>
+
+            <!-- Retry -->
+            <div class="control-group">
+                <label>Retry (ms)</label>
+                <div class="stepper">
+                    <button onclick="stepRetry(-1000)">+</button>
+                    <input type="number" id="inp-retry" value="3000" min="100" step="100" oninput="sendConfig()" />
+                    <button onclick="stepRetry(1000)">+</button>
+                </div>
+            </div>
+
+            <!-- Data -->
+            <div class="control-group">
+                <label>Event Data</label>
+                <input type="text" id="inp-data" value="Hello from Server" oninput="sendConfig()" />
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── EventSource Console ────────────────────────────────────── -->
+    <div class="card" style="flex: 1; display: flex; flex-direction: column">
+        <div class="console-toolbar">
+            <h2 style="margin: 0">EventSource Console</h2>
+            <button class="btn-clear" onclick="clearConsole()">
+                Clear
+            </button>
+        </div>
+        <div id="console">
+            <span class="log-server">— Waiting for connection —</span>
+        </div>
+    </div>
+
+    <script>
+        // ── socket.io ──────────────────────────────────────────────────────────
+        const socket = io();
+
+        socket.on("connect", () =>
+            logLine("server", "[socket.io] Connected to control server"),
+        );
+        socket.on("disconnect", () =>
+            logLine(
+                "error",
+                "[socket.io] Disconnected from control server",
+            ),
+        );
+
+        socket.on("state", (s) => applyState(s));
+        socket.on("log", (msg) => logLine("server", msg));
+
+        // ── EventSource ────────────────────────────────────────────────────────
+        let es = null;
+
+        function openES() {
+            if (es) {
+                es.close();
+                es = null;
+            }
+            const sseUrl = "/events";
+            logLine("open", `[EventSource] Connecting to ${sseUrl}`);
+            es = new EventSource(sseUrl);
+
+            es.onopen = () => {
+                setStatus("status-es", "on");
+                document.getElementById("label-es").textContent =
+                    "EventSource: Connected";
+                logLine("open", "[EventSource] Connection opened");
+            };
+
+            es.onmessage = (e) => {
+                logLine("message", `[message] data: ${e.data}`);
+            };
+
+            es.addEventListener("message", (e) => {
+                logLine(
+                    "event",
+                    `[event:message] id=${e.lastEventId}  data: ${e.data}`,
+                );
+            });
+
+            es.addEventListener("myevent", (e) => {
+                logLine(
+                    "event",
+                    `[event:myevent] id=${e.lastEventId}  data: ${e.data}`,
+                );
+            });
+
+            es.onerror = (e) => {
+                setStatus("status-es", "err");
+                document.getElementById("label-es").textContent =
+                    "EventSource: Error / Retrying";
                 logLine(
                     "error",
-                    "[socket.io] Disconnected from control server",
-                ),
+                    `[EventSource] Error — readyState=${es ? es.readyState : "?"} ${e ? e.message : ""}`,
+                );
+                console.log(e);
+            };
+        }
+
+        function closeES() {
+            if (es) {
+                es.close();
+                es = null;
+            }
+            setStatus("status-es", "on", false);
+            document.getElementById("label-es").textContent =
+                "EventSource: Disconnected";
+            logLine("error", "[EventSource] Connection closed");
+        }
+
+        // ── Apply state from server ────────────────────────────────────────────
+        let currentState = {};
+
+        function applyState(s) {
+            const wasRunning = currentState.sseRunning;
+            currentState = s;
+
+            // SSE server button
+            const btnSSE = document.getElementById("btn-sse");
+            btnSSE.textContent = s.sseRunning ? "STOP" : "START";
+            btnSSE.className = s.sseRunning ? "btn-stop" : "btn-start";
+            setStatus("status-sse", "on", s.sseRunning);
+            document.getElementById("label-sse").textContent = s.sseRunning ? "SSE Server: Running" : "SSE Server: Stopped";
+            if (s.sseRunning && !wasRunning) openES();
+            else if (!s.sseRunning && wasRunning) closeES();
+
+            // Stream button
+            const btnStream = document.getElementById("btn-stream");
+            btnStream.textContent = s.streamRunning ? "STOP" : "START";
+            btnStream.className = s.streamRunning ? "btn-stop" : "btn-start";
+            setStatus("status-stream", "on", s.streamRunning);
+            document.getElementById("label-stream").textContent = s.streamRunning ? "Stream Events: Running" : "Stream Events: Stopped";
+
+            // Server simulate timeout
+            const btnSleep = document.getElementById("btn-sse-sleep");
+
+            btnSleep.textContent = s.sleep ? "DISABLE" : "ENABLE";
+            btnSleep.className = s.sleep ? "btn-stop" : "btn-start";
+
+            // Config fields (avoid overwriting while user is typing)
+            document.getElementById("sel-status").value = String(
+                s.statusCode,
             );
+            updateLocationRow(s.statusCode);
+            document.getElementById("inp-location").value =
+                s.locationHeader || "";
+            document.getElementById("inp-retry").value = s.retry;
+            document.getElementById("inp-data").value = s.data;
+            document.getElementById("inp-interval").value = s.intervalMs;
+        }
 
-            socket.on("state", (s) => applyState(s));
-            socket.on("log", (msg) => logLine("server", msg));
+        // ── Controls ───────────────────────────────────────────────────────────
+        function toggleSSE() {
+            if (currentState.sseRunning) {
+                socket.emit("stop-sse");
+                if (currentState.streamRunning) toggleStream();
+            } else socket.emit("start-sse");
+        }
 
-            // ── EventSource ────────────────────────────────────────────────────────
-            let es = null;
+        function toggleSleep() {
+            if (currentState.sleep) socket.emit("disable-sse-sleep");
+            else socket.emit("enable-sse-sleep");
+        }
 
-            function openES() {
-                if (es) {
-                    es.close();
-                    es = null;
-                }
-                const sseUrl = "/events";
-                logLine("open", `[EventSource] Connecting to ${sseUrl}`);
-                es = new EventSource(sseUrl);
+        function toggleStream() {
+            if (currentState.streamRunning) socket.emit("stop-stream");
+            else socket.emit("start-stream");
+        }
 
-                es.onopen = () => {
-                    setDot("dot-es", "on");
-                    document.getElementById("label-es").textContent =
-                        "EventSource: Connected";
-                    logLine("open", "[EventSource] Connection opened");
-                };
+        function onStatusChange() {
+            updateLocationRow(
+                parseInt(document.getElementById("sel-status").value, 10),
+            );
+            sendConfig();
+        }
 
-                es.onmessage = (e) => {
-                    logLine("message", `[message] data: ${e.data}`);
-                };
+        function updateLocationRow(code) {
+            const row = document.getElementById("location-row");
+            if (code >= 300 && code < 400) row.classList.remove("hidden");
+            else row.classList.add("hidden");
+        }
 
-                es.addEventListener("message", (e) => {
-                    logLine(
-                        "event",
-                        `[event:message] id=${e.lastEventId}  data: ${e.data}`,
-                    );
-                });
+        function sendConfig() {
+            const cfg = {
+                statusCode: parseInt(
+                    document.getElementById("sel-status").value,
+                    10,
+                ),
+                locationHeader: document.getElementById("inp-location").value,
+                retry: parseInt(
+                    document.getElementById("inp-retry").value,
+                    10,
+                ) || 3000,
+                data: document.getElementById("inp-data").value,
+                intervalMs: parseInt(
+                    document.getElementById("inp-interval").value,
+                    10,
+                ) || 3000,
+            };
+            socket.emit("config", cfg);
+        }
 
-                es.addEventListener("myevent", (e) => {
-                    logLine(
-                        "event",
-                        `[event:myevent] id=${e.lastEventId}  data: ${e.data}`,
-                    );
-                });
+        function stepInterval(delta) {
+            const inp = document.getElementById("inp-interval");
+            const val = Math.max(
+                100,
+                (parseInt(inp.value, 10) || 3000) + delta,
+            );
+            inp.value = val;
+            sendConfig();
+        }
 
-                es.onerror = (e) => {
-                    setDot("dot-es", "err");
-                    document.getElementById("label-es").textContent =
-                        "EventSource: Error / Retrying";
-                    logLine(
-                        "error",
-                        `[EventSource] Error — readyState=${es ? es.readyState : "?"} ${e ? e.message : ""}`,
-                    );
-                    console.log(e);
-                };
+        function stepRetry(delta) {
+            const inp = document.getElementById("inp-retry");
+            const val = Math.max(
+                100,
+                (parseInt(inp.value, 10) || 3000) + delta,
+            );
+            inp.value = val;
+            sendConfig();
+        }
+
+        // ── Console ────────────────────────────────────────────────────────────
+        const consoleEl = document.getElementById("console");
+
+        function logLine(type, text) {
+            const atBottom =
+                consoleEl.scrollHeight -
+                consoleEl.scrollTop -
+                consoleEl.clientHeight <
+                40;
+            const line = document.createElement("div");
+            line.className = `log-line log-${type}`;
+            const now = new Date().toLocaleTimeString("en-GB", {
+                hour12: false,
+                fractionalSecondDigits: 3,
+            });
+            line.textContent = `[${now}] ${text}`;
+            consoleEl.appendChild(line);
+            if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function clearConsole() {
+            consoleEl.innerHTML = "";
+        }
+
+        // ── Helpers ────────────────────────────────────────────────────────────
+        function setStatus(id, cls, addOrRemove = true) {
+            const statusEl = document.getElementById(id);
+            if (statusEl) {
+                statusEl.classList.toggle(cls, addOrRemove);
+            } else {
+                console.warn("cannot find element with id", id);
             }
+        }
+    </script>
+</body>
 
-            function closeES() {
-                if (es) {
-                    es.close();
-                    es = null;
-                }
-                setDot("dot-es", "");
-                document.getElementById("label-es").textContent =
-                    "EventSource: Disconnected";
-                logLine("error", "[EventSource] Connection closed");
-            }
-
-            // ── Apply state from server ────────────────────────────────────────────
-            let currentState = {};
-
-            function applyState(s) {
-                const wasRunning = currentState.sseRunning;
-                currentState = s;
-
-                // SSE server button
-                const btnSSE = document.getElementById("btn-sse");
-                if (s.sseRunning) {
-                    btnSSE.textContent = "STOP";
-                    btnSSE.className = "btn-stop";
-                    setDot("dot-sse", "on");
-                    document.getElementById("label-sse").textContent =
-                        "SSE Server: Running";
-                    if (!wasRunning) openES();
-                } else {
-                    btnSSE.textContent = "START";
-                    btnSSE.className = "btn-start";
-                    setDot("dot-sse", "");
-                    document.getElementById("label-sse").textContent =
-                        "SSE Server: Stopped";
-                    if (wasRunning) closeES();
-                }
-
-                // Stream button
-                const btnStream = document.getElementById("btn-stream");
-                if (s.streamRunning) {
-                    btnStream.textContent = "STOP";
-                    btnStream.className = "btn-stop";
-                    setDot("dot-stream", "on");
-                    document.getElementById("label-stream").textContent =
-                        "Stream Events: Running";
-                } else {
-                    btnStream.textContent = "START";
-                    btnStream.className = "btn-start";
-                    setDot("dot-stream", "");
-                    document.getElementById("label-stream").textContent =
-                        "Stream Events: Stopped";
-                }
-
-                // Config fields (avoid overwriting while user is typing)
-                document.getElementById("sel-status").value = String(
-                    s.statusCode,
-                );
-                updateLocationRow(s.statusCode);
-                document.getElementById("inp-location").value =
-                    s.locationHeader || "";
-                document.getElementById("inp-retry").value = s.retry;
-                document.getElementById("inp-data").value = s.data;
-                document.getElementById("inp-interval").value = s.intervalMs;
-            }
-
-            // ── Controls ───────────────────────────────────────────────────────────
-            function toggleSSE() {
-                if (currentState.sseRunning) socket.emit("stop-sse");
-                else socket.emit("start-sse");
-            }
-
-            function toggleStream() {
-                if (currentState.streamRunning) socket.emit("stop-stream");
-                else socket.emit("start-stream");
-            }
-
-            function onStatusChange() {
-                updateLocationRow(
-                    parseInt(document.getElementById("sel-status").value, 10),
-                );
-                sendConfig();
-            }
-
-            function updateLocationRow(code) {
-                const row = document.getElementById("location-row");
-                if (code >= 300 && code < 400) row.classList.remove("hidden");
-                else row.classList.add("hidden");
-            }
-
-            function sendConfig() {
-                const cfg = {
-                    statusCode: parseInt(
-                        document.getElementById("sel-status").value,
-                        10,
-                    ),
-                    locationHeader:
-                        document.getElementById("inp-location").value,
-                    retry:
-                        parseInt(
-                            document.getElementById("inp-retry").value,
-                            10,
-                        ) || 3000,
-                    data: document.getElementById("inp-data").value,
-                    intervalMs:
-                        parseInt(
-                            document.getElementById("inp-interval").value,
-                            10,
-                        ) || 3000,
-                };
-                socket.emit("config", cfg);
-            }
-
-            function stepInterval(delta) {
-                const inp = document.getElementById("inp-interval");
-                const val = Math.max(
-                    100,
-                    (parseInt(inp.value, 10) || 3000) + delta,
-                );
-                inp.value = val;
-                sendConfig();
-            }
-
-            function stepSleep(delta) {
-                const inp = document.getElementById("inp-sleep");
-                const val = Math.min(
-                    60,
-                    (parseInt(inp.value, 10) || 1) + delta,
-                );
-                inp.value = val;
-                sendConfig();
-            }
-
-            // ── Console ────────────────────────────────────────────────────────────
-            const consoleEl = document.getElementById("console");
-
-            function logLine(type, text) {
-                const atBottom =
-                    consoleEl.scrollHeight -
-                        consoleEl.scrollTop -
-                        consoleEl.clientHeight <
-                    40;
-                const line = document.createElement("div");
-                line.className = `log-line log-${type}`;
-                const now = new Date().toLocaleTimeString("en-GB", {
-                    hour12: false,
-                    fractionalSecondDigits: 3,
-                });
-                line.textContent = `[${now}] ${text}`;
-                consoleEl.appendChild(line);
-                if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
-            }
-
-            function clearConsole() {
-                consoleEl.innerHTML = "";
-            }
-
-            // ── Helpers ────────────────────────────────────────────────────────────
-            function setDot(id, cls) {
-                const dot = document.getElementById(id);
-                dot.className = "dot" + (cls ? " " + cls : "");
-            }
-        </script>
-    </body>
 </html>
