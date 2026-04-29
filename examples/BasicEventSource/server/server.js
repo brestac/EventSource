@@ -65,15 +65,21 @@ async function sseHandler(req, res) {
     }
 
     if (state.sleep) {
-      await new Promise((resolve) => {
+      io.emit("log", `[SSE] Server blocked for ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`);
+      const result = await new Promise((resolve) => {
         const start = new Date();
         const timer = setInterval(() => {
-          if (state.sleep == false || (new Date() - start) > SERVER_BLOCKED_DELAY) {
+          if ((new Date() - start) > SERVER_BLOCKED_DELAY) {
+              clearInterval(timer);
+              resolve(`Server unblocked after ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`);
+          }
+          else if (state.sleep == false) {
             clearInterval(timer);
-            resolve(state.sleep);
+            resolve("Server unblocked by user");
           }
         }, 1000);
       });
+      io.emit("log", `[SSE] ${result}`);
     }
 
     // 200 — open SSE stream
@@ -86,7 +92,8 @@ async function sseHandler(req, res) {
     res.setHeader("Connection", "keep-alive");
     res.status(200);
 
-    const device = req.get("x-device") ?? "Browser";
+    const deviceId = req.get("x-device");
+    const device = deviceId ? `Device ${deviceId}` : "Browser";
     const lastId = req.get("last-event-id") ?? "none";
     console.log(
         `Device "${device}" connected to SSE. Last-Event-ID: ${lastId}`,
@@ -96,15 +103,15 @@ async function sseHandler(req, res) {
         `[SSE] Device "${device}" connected. Last-Event-ID: ${lastId}`,
     );
 
-    if (state.streamRunning) {
-        sendEvent(res);
-    }
-
     const intervalId = state.streamRunning
         ? setInterval(() => sendEvent(res), state.intervalMs)
         : null;
 
     sseClients.set(res, intervalId);
+
+    if (state.streamRunning) {
+        sendEvent(res);
+    }
 
     req.on("close", () => {
         const iid = sseClients.get(res);
@@ -128,6 +135,7 @@ sseApp.use(cors());
 
 sseApp.get("/events", sseHandler);
 sseApp.get("/redirect-events", async (req, res) => {
+    console.log("/redirect-events called");
     state.statusCode = 200;
     await sseHandler(req, res);
 });
@@ -136,14 +144,14 @@ const sseServer = http.createServer(sseApp);
 
 
 io.on("connection", (socket) => {
-    console.log("Control client connected:", socket.id);
+    console.log("Websocket client connected:", socket.id);
 
     // Send current state immediately on connect
     socket.emit("state", state);
 
     socket.on("start-sse", () => {
       sseServer.listen(SSE_PORT, SSE_HOST, () => {
-          console.log(`SSE  server listening on http://${SSE_HOST}:${SSE_PORT}`);
+          console.log(`SSE server listening on http://${SSE_HOST}:${SSE_PORT}`);
           state.sseRunning = true;
 
           io.emit("state", state);
