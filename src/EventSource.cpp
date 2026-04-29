@@ -175,7 +175,7 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   _retryDelayMultiplier = 1;
   _retryCount = 0;
   _lastEventId[0] = '\0';
-  _lastConnectionTime = 0;
+  _connectionTimer = 0;
   _dispachQueueSize = 0;
   _lock_queue = false;
   _eventHandlerCount = 0;
@@ -233,16 +233,14 @@ void EventSource::_update() {
   }
 #endif
   if (_client->connected()) {
-    if (_force_disconnect || (millis() - _lastConnectionTime) > _timeout) {
-      std::printf("[SSE] Timeout");
-      _lastConnectionTime = millis();
+    if (_force_disconnect) {
+      std::printf("[SSE] Force disconnect");
+      _connectionTimer = millis();
       _force_disconnect = false;
       _client->close();
     }
-  } else if (_force_connect || (millis() - _lastConnectionTime) >
-                                 _retryDelay * _retryDelayMultiplier) {
-    DEBUG_PRINTF("[SSE] Reconnecting after %zu ms",
-                 millis() - _lastConnectionTime);
+  } else if (_force_connect || (millis() - _connectionTimer) > _retryDelay * _retryDelayMultiplier) {
+    DEBUG_PRINTF("[SSE] Reconnecting after %zu ms reason:%s", millis() - _connectionTimer, _force_connect ? "force" : "retry timeout");
     _force_connect = false;
     _connect();
   }
@@ -596,7 +594,7 @@ void EventSource::_connect(const char * host, const char * path, uint16_t port, 
   _client->connect(host, port);
 #endif
 
-  _lastConnectionTime = millis();
+  _connectionTimer = millis();
   _retryCount++;
 
   if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
@@ -633,31 +631,6 @@ void EventSource::_sendRequest(AsyncClient *client) {
 }
 
 // ---------- public API ----------
-
-void EventSource::addEventListener(const char *type,
-                                   const EventHandler &handler) {
-  if (handler == nullptr || !validate_event_type(type)) {
-    DEBUG_PRINTLN("[SSE] Gestionnaire ou type invalide");
-#ifdef __EXCEPTIONS
-    throw std::runtime_error("[SyntaxError] Invalid handler or event type");
-#endif
-    return;
-  }
-
-  if (_eventHandlerCount >= MAX_EVENT_HANDLER_COUNT) {
-    DEBUG_PRINTLN("[SSE] Max event handler count reached");
-    return;
-  }
-
-  if (!_contains(_eventHandlers, type)) {
-    strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
-    _eventHandlers[_eventHandlerCount].key[MAX_EVENT_TYPE_SIZE - 1] = '\0';
-    _eventHandlers[_eventHandlerCount].value = handler;
-    _eventHandlerCount++;
-    DEBUG_PRINTF("[SSE] Added handler for '%s', count: %d\n", type,
-                 _eventHandlerCount);
-  }
-}
 
 void EventSource::_disconnect() { _client->close(); }
 
@@ -745,13 +718,16 @@ bool EventSource::_process_line(const char *cstr, size_t len, Event &event) {
   
   if (len == 0) {
     DEBUG_PRINT("Empty line, ");
-    if (!is_empty_line && event._hasData) {
-      DEBUG_PRINTLN("Enqueuing data event");
-      _addToQueue(event);
+    if (!is_empty_line) {
       is_empty_line = true;
+      if (event._hasData) {
+        DEBUG_PRINTLN("Enqueuing data event");
+        _addToQueue(event);
+      }
       return true;
     }
-    DEBUG_PRINTLN("no data to enqueue or already empty line");
+    
+    DEBUG_PRINTLN(is_empty_line ? "ignoring consecutive empty line" : "no data to send");
     return false;
   }
 
