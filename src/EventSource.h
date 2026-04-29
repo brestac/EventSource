@@ -92,12 +92,6 @@ constexpr const char *DEFAULT_HEADERS = "Accept: text/event-stream\r\n"
 
 // ---------- free-function declarations ----------
 
-inline size_t linelen(const char *cstr, const char* end);
-inline bool isdigits(const char *str);
-inline void _isResponseValidEventStream(const char *data, size_t len,
-                                        bool &contentTypeOk, int &statusCode);
-static constexpr bool validate_event_type(const char *str);
-
 #ifndef ARDUINO
 inline uint64_t millis();
 inline void yield() {}
@@ -175,7 +169,7 @@ public:
 
   ~EventSource();
 
-  void addEventListener(const char *type, const EventHandler &handler);
+  template <size_t N> void addEventListener(char const (&type)[N], const EventHandler &handler);
   template <size_t N, size_t M> void addHeader(char (&key)[N], char (&val)[M]);
   void close();
   void reconnect();
@@ -227,7 +221,7 @@ private:
   bool _secure;
   uint32_t _retryDelay;
   uint8_t _readyState;
-  uint64_t _lastConnectionTime;
+  uint64_t _connectionTimer;
   size_t _dispachQueueSize;
   bool _lock_queue;
   size_t _retryCount;
@@ -235,6 +229,7 @@ private:
   uint32_t _timeout;
   bool _force_connect;
   bool _force_disconnect;
+  bool _headers_received;
 
   // Static callbacks
   static void _onConnectStatic(void *arg, AsyncClient *client);
@@ -302,17 +297,46 @@ bool EventSource::_contains(const T (&array)[N], const char *key) {
   return false;
 }
 
-// ---------- free-function definitions (inline, header-only) ----------
-
-static constexpr bool validate_event_type(const char *str) {
-  if (str == nullptr || strlen(str) == 0)
+template <size_t N>
+static bool validate_event_type(const char (&str)[N]) {
+  if (N == 0 || (str)[0] == '\0')
     return false;
-  while (*str != '\0') {
-    if (*str == '\r' || *str == '\n' || *str == '\0')
+
+  size_t pos = 0;
+
+  while (pos < N) {
+    if (str[pos] == '\r' || str[pos] == '\n') {
       return false;
-    str++;
+    }
+
+    pos++;
   }
+
   return true;
+}
+
+template <size_t N>
+void EventSource::addEventListener(char const (&type)[N], const EventHandler &handler) {
+
+  if (!validate_event_type(type)) {
+    DEBUG_PRINTF("[SSE] Event listener type invalide: '%.*s'\n", (int)N, type);
+    return;
+  }
+
+  if (_eventHandlerCount >= MAX_EVENT_HANDLER_COUNT) {
+    DEBUG_PRINTLN("[SSE] Max event handler count reached");
+    return;
+  }
+
+  if (!_contains(_eventHandlers, type)) {
+    strncpy(_eventHandlers[_eventHandlerCount].key, type, MAX_EVENT_TYPE_SIZE);
+    _eventHandlers[_eventHandlerCount].key[MAX_EVENT_TYPE_SIZE - 1] = '\0';
+    _eventHandlers[_eventHandlerCount].value = handler;
+    _eventHandlerCount++;
+    DEBUG_PRINTF("[SSE] Added handler for '%s', count: %d\n", type, _eventHandlerCount);
+  } else {
+    DEBUG_PRINTF("[SSE] Handler for '%s' already exists\n", type);
+  }
 }
 
 inline bool isdigits(const char *str) {
