@@ -25,6 +25,7 @@
 
 #if DEBUG_EVENTSOURCE == 1
 #ifdef ARDUINO
+#include "HardwareSerial.h"
 #define DEBUG_PRINTLN(x) Serial.println(x)
 #define DEBUG_PRINTF(x...) Serial.printf(x)
 #define DEBUG_PRINT(x) Serial.print(x)

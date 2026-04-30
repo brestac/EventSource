@@ -216,12 +216,13 @@ void EventSource::_update() {
 #ifdef DEBUG_EVENTSOURCE
   static uint8_t prevReadyState = CONNECTING;
 #endif
-  if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL) {
-    _processQueue();
-    lastQueueUpdate = millis();
 #ifdef ARDUINO
     system_soft_wdt_feed();
 #endif
+
+  if (millis() - lastQueueUpdate > QUEUE_PROCESSING_INTERVAL) {
+    _processQueue();
+    lastQueueUpdate = millis();
   }
 
   if (_readyState != CONNECTING)
@@ -232,15 +233,17 @@ void EventSource::_update() {
     prevReadyState = _readyState;
   }
 #endif
+
   if (_client->connected()) {
     if (_force_disconnect) {
-      std::printf("[SSE] Force disconnect");
+      DEBUG_PRINTLN("[SSE] Force disconnect");
       _connectionTimer = millis();
       _force_disconnect = false;
       _client->close();
     }
   } else if (_force_connect || (millis() - _connectionTimer) > _retryDelay * _retryDelayMultiplier) {
-    DEBUG_PRINTF("[SSE] Reconnecting after %zu ms reason:%s", millis() - _connectionTimer, _force_connect ? "force" : "retry timeout");
+    
+    DEBUG_PRINTF("[SSE] Reconnecting after %llu ms reason:%s\n", millis() - _connectionTimer, _force_connect ? "force" : "retry timeout");
     _force_connect = false;
     _connect();
   }
@@ -317,7 +320,7 @@ void EventSource::_onTimeoutStatic(void *arg, AsyncClient *client,
 // ---------- connection lifecycle ----------
 
 void EventSource::_onConnect(AsyncClient *client) {
-  DEBUG_PRINTLN("[SSE] Connexion établie");
+  DEBUG_PRINTLN("[SSE] Connexion TCP établie");
   _sendRequest(client);
 }
 
@@ -588,14 +591,14 @@ void EventSource::_connect(const char * host, const char * path, uint16_t port, 
     return;
   }
 
+  _connectionTimer = millis();
+  _retryCount++;
+
 #if ASYNC_TCP_SSL_ENABLED
   _client->connect(host, port, secure);
 #else
   _client->connect(host, port);
 #endif
-
-  _connectionTimer = millis();
-  _retryCount++;
 
   if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
     _retryCount = 0;
