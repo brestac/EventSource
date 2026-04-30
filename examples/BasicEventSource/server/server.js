@@ -7,9 +7,8 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const HTML_HOST = process.env.HTML_HOST;
+const HOST = process.env.HOST;
 const HTML_PORT = process.env.HTML_PORT;
-const SSE_HOST = process.env.SSE_HOST;
 const SSE_PORT = process.env.SSE_PORT;
 const SERVER_BLOCKED_DELAY = 30 * 60 * 1000; // 30mn
 
@@ -125,8 +124,8 @@ async function sseHandler(req, res) {
 // Mount SSE on the HTML server so the browser can reach it same-origin
 htmlApp.get("/events", sseHandler);
 
-htmlServer.listen(HTML_PORT, HTML_HOST, () => {
-    console.log(`HTML server listening on http://${HTML_HOST}:${HTML_PORT}`);
+htmlServer.listen(HTML_PORT, HOST, () => {
+    console.log(`HTML server listening on http://${HOST}:${HTML_PORT}`);
 });
 
 // ── SSE Server (port 5001) — for direct ESP8266 / LAN access ─────────────
@@ -150,8 +149,8 @@ io.on("connection", (socket) => {
     socket.emit("state", state);
 
     socket.on("start-sse", () => {
-      sseServer.listen(SSE_PORT, SSE_HOST, () => {
-          console.log(`SSE server listening on http://${SSE_HOST}:${SSE_PORT}`);
+      sseServer.listen(SSE_PORT, HOST, () => {
+          console.log(`SSE server started on http://${HOST}:${SSE_PORT}`);
           state.sseRunning = true;
 
           io.emit("state", state);
@@ -267,15 +266,15 @@ function sendEvent(clientRes) {
     }
 }
 
-const close_all = () => {
-  console.log('SIGTERM signal received.');
-  sseServer.close(() => {
-    console.log('Closed out remaining connections');
-    // Additional cleanup tasks go here, e.g., close database connection
-    process.exit(0);
-  });
-};
-
-process.on('SIGTERM', close_all);
-
-process.on('SIGINT', close_all);
+// const close_all = () => {
+//   console.log('SIGTERM signal received.');
+//   sseServer.close(() => {
+//     console.log('Closed out remaining connections');
+//     // Additional cleanup tasks go here, e.g., close database connection
+//     process.exit(0);
+//   });
+// };
+//
+// process.on('SIGTERM', close_all);
+//
+// process.on('SIGINT', close_all);

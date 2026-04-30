@@ -9,16 +9,14 @@
  *   - ESPAsyncTCP  https://github.com/me-no-dev/ESPAsyncTCP
  */
 
-// Uncomment to enable library debug output
-// #define DEBUG_EVENTSOURCE 1
-
 #include <ESP8266WiFi.h>
 #include <EventSource.h>
 
 #define WIFI_SSID "YOUR_SSID"
 #define WIFI_PASSWORD "YOUR_PASSWORD"
 
-EventSource source("http://0.0.0.0:4001/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
+// Set HOST, HTML_PORT, SSE_PORT in examples/BasicEventSource/server/.env
+EventSource source("http://HOST:SSE_PORT/events", {{"X-Device", ESP.getChipId()}, {"User-Agent", "EventSource/1.0"}});
 
 void setup() {
 
@@ -43,6 +41,9 @@ void setup() {
   });
 
   WiFi.mode(WIFI_STA);
+  uint8_t mac[6] = {170,0,0,0,0,11};
+  wifi_set_macaddr(STATION_IF, const_cast<uint8 *>(mac));
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.printf("WiFi Failed!\n");
