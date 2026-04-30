@@ -213,7 +213,7 @@ void EventSource::update() { _update(); }
 
 void EventSource::_update() {
   static uint64_t lastQueueUpdate = 0;
-#ifdef DEBUG_EVENTSOURCE
+#ifdef DEBUG_ESP_PORT
   static uint8_t prevReadyState = CONNECTING;
 #endif
 #ifdef ARDUINO
@@ -227,7 +227,7 @@ void EventSource::_update() {
 
   if (_readyState != CONNECTING)
     return;
-#ifdef DEBUG_EVENTSOURCE
+#ifdef DEBUG_ESP_PORT
   if (prevReadyState != _readyState) {
     DEBUG_PRINTF("[SSE] Ready state changed to %hhu\n", _readyState);
     prevReadyState = _readyState;

@@ -23,12 +23,12 @@
 */
 #pragma once
 
-#if DEBUG_EVENTSOURCE == 1
+#ifdef DEBUG_ESP_PORT
 #ifdef ARDUINO
 #include "HardwareSerial.h"
-#define DEBUG_PRINTLN(x) Serial.println(x)
-#define DEBUG_PRINTF(x...) Serial.printf(x)
-#define DEBUG_PRINT(x) Serial.print(x)
+#define DEBUG_PRINTLN(x) DEBUG_ESP_PORT.println(x)
+#define DEBUG_PRINTF(x...) DEBUG_ESP_PORT.printf(x)
+#define DEBUG_PRINT(x) DEBUG_ESP_PORT.print(x)
 #elif defined(__linux__) || defined(__APPLE__)
 #define DEBUG_PRINTLN(x) std::printf("%s\n", x)
 #define DEBUG_PRINTF(x...) std::printf(x)

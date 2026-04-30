@@ -20,9 +20,7 @@ src/Ticker.h
 src/IPAddress.h
 
 #Local testing
-examples/BasicEventSource/BasicEventSource-debug.ino
-examples/BasicEventSource/EventSource.h
-examples/BasicEventSource/EventSource.cpp
+examples/BasicEventSource-debug
 
 #Replit
 .agents
