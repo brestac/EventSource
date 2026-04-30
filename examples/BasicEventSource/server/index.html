@@ -313,10 +313,8 @@
 
             // ── Controls ───────────────────────────────────────────────────────────
             function toggleSSE() {
-                if (currentState.sseRunning) {
-                    socket.emit("stop-sse");
-                    if (currentState.streamRunning) toggleStream();
-                } else socket.emit("start-sse");
+                if (currentState.sseRunning) socket.emit("stop-sse");
+                else socket.emit("start-sse");
             }
 
             function toggleSleep() {

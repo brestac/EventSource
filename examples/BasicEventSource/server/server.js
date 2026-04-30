@@ -170,6 +170,11 @@ io.on("connection", (socket) => {
         sseServer.close(() => {
           state.sseRunning = false;
           console.log("SSE server stopped — all clients disconnected");
+          if (state.streamRunning) {
+              state.streamRunning = false;
+              console.log("Stream events stopped");
+          } 
+
           io.emit("state", state);
         });
     });
