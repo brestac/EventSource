@@ -17,11 +17,11 @@ const state = {
     sseRunning: false,
     streamRunning: false,
     statusCode: 200,
-    locationHeader: "/redirect-events",//"http://0.0.0.0:5001/redirect-events",
+    locationHeader: "/redirect-events", //"http://0.0.0.0:5001/redirect-events",
     retry: 3000,
     data: "Hello from SERVER",
     intervalMs: 3000,
-    sleep: false
+    sleep: false,
 };
 
 // Active SSE clients: Map<res, intervalId>
@@ -39,7 +39,6 @@ const htmlServer = http.createServer(htmlApp);
 const io = new SocketIOServer(htmlServer, {
     cors: { origin: "*" },
 });
-
 
 // ── Shared SSE route handler (mounted on both servers) ────────────────────
 async function sseHandler(req, res) {
@@ -64,21 +63,25 @@ async function sseHandler(req, res) {
     }
 
     if (state.sleep) {
-      io.emit("log", `[SSE] Server blocked for ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`);
-      const result = await new Promise((resolve) => {
-        const start = new Date();
-        const timer = setInterval(() => {
-          if ((new Date() - start) > SERVER_BLOCKED_DELAY) {
-              clearInterval(timer);
-              resolve(`Server unblocked after ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`);
-          }
-          else if (state.sleep == false) {
-            clearInterval(timer);
-            resolve("Server unblocked by user");
-          }
-        }, 1000);
-      });
-      io.emit("log", `[SSE] ${result}`);
+        io.emit(
+            "log",
+            `[SSE] Server blocked for ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`,
+        );
+        const result = await new Promise((resolve) => {
+            const start = new Date();
+            const timer = setInterval(() => {
+                if (new Date() - start > SERVER_BLOCKED_DELAY) {
+                    clearInterval(timer);
+                    resolve(
+                        `Server unblocked after ${SERVER_BLOCKED_DELAY / 1000 / 60}mn`,
+                    );
+                } else if (state.sleep == false) {
+                    clearInterval(timer);
+                    resolve("Server unblocked by user");
+                }
+            }, 1000);
+        });
+        io.emit("log", `[SSE] ${result}`);
     }
 
     // 200 — open SSE stream
@@ -92,7 +95,9 @@ async function sseHandler(req, res) {
     res.status(200);
 
     const deviceId = req.get("x-device");
-    const device = deviceId ? `Device ${deviceId}` : "Browser";
+    const device = deviceId
+        ? `Device ${deviceId}`
+        : (req.get("user-agent") ?? "Unknown");
     const lastId = req.get("last-event-id") ?? "none";
     console.log(
         `Device "${device}" connected to SSE. Last-Event-ID: ${lastId}`,
@@ -141,7 +146,6 @@ sseApp.get("/redirect-events", async (req, res) => {
 
 const sseServer = http.createServer(sseApp);
 
-
 io.on("connection", (socket) => {
     console.log("Websocket client connected:", socket.id);
 
@@ -149,12 +153,12 @@ io.on("connection", (socket) => {
     socket.emit("state", state);
 
     socket.on("start-sse", () => {
-      sseServer.listen(SSE_PORT, HOST, () => {
-          console.log(`SSE server started on http://${HOST}:${SSE_PORT}`);
-          state.sseRunning = true;
+        sseServer.listen(SSE_PORT, HOST, () => {
+            console.log(`SSE server started on http://${HOST}:${SSE_PORT}`);
+            state.sseRunning = true;
 
-          io.emit("state", state);
-      });
+            io.emit("state", state);
+        });
     });
 
     socket.on("stop-sse", () => {
@@ -168,14 +172,14 @@ io.on("connection", (socket) => {
         sseClients.clear();
 
         sseServer.close(() => {
-          state.sseRunning = false;
-          console.log("SSE server stopped — all clients disconnected");
-          if (state.streamRunning) {
-              state.streamRunning = false;
-              console.log("Stream events stopped");
-          } 
+            state.sseRunning = false;
+            console.log("SSE server stopped — all clients disconnected");
+            if (state.streamRunning) {
+                state.streamRunning = false;
+                console.log("Stream events stopped");
+            }
 
-          io.emit("state", state);
+            io.emit("state", state);
         });
     });
 
