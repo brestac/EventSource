@@ -173,7 +173,7 @@ public:
 
   template <size_t N> void addEventListener(char const (&type)[N], const EventHandler &handler);
   template <size_t N, size_t M> void addHeader(const char (&key)[N], const char (&val)[M]);
-  template <size_t N> void addHeader(const char (&key)[N], CustomHeaderValue& value);
+  template <size_t N> void addHeader(const char (&key)[N], const CustomHeaderValue& value);
   void close();
   void reconnect();
   void setRetryDelay(uint32_t retryDelay);
@@ -295,7 +295,7 @@ void EventSource::addHeader(const char (&key)[N], const char (&val)[M]) {
 }
 
 template <size_t N>
-void EventSource::addHeader(const char (&key)[N], CustomHeaderValue& value) {
+void EventSource::addHeader(const char (&key)[N], const CustomHeaderValue& value) {
   _addHeader(key, N - 1, value);
 }
 
