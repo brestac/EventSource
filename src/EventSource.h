@@ -156,6 +156,7 @@ public:
 
   typedef std::function<void(Event &)> EventHandler;
 
+  EventSource();
   EventSource(const char *url, const Options &options);
   EventSource(const char *host, const char *path, uint16_t port,
               const Options &options);
@@ -171,18 +172,22 @@ public:
   ~EventSource();
 
   template <size_t N> void addEventListener(char const (&type)[N], const EventHandler &handler);
-  template <size_t N, size_t M> void addHeader(char (&key)[N], char (&val)[M]);
+  template <size_t N, size_t M> void addHeader(const char (&key)[N], const char (&val)[M]);
+  template <size_t N> void addHeader(const char (&key)[N], CustomHeaderValue& value);
   void close();
   void reconnect();
   void setRetryDelay(uint32_t retryDelay);
   void setTimeout(uint32_t timeout);
+  void setURL(const char *url) { _setURL(url); }
   // #ifndef ESP32
   void update();
   // #endif
+
+  // Accessors
   const char *host() const { return _apiHost; }
   const char *path() const { return _ssePath; }
   uint16_t port() const { return _apiPort; }
-
+  
   uint8_t readyState() { return _readyState; }
   bool secure() const { return _secure; }
   uint32_t retryDelay() const { return _retryDelay; }
@@ -243,8 +248,9 @@ private:
   // Internal helpers
   template <typename Opts> void _init(const char *url, Opts options);
   template <typename Host, typename Opts>
-  void _init(Host host, const char *path, uint16_t port, const Opts &options,
-             bool secure = false);
+  void _init(Host host, const char *path, uint16_t port, bool secure, const Opts &options);
+  void _init();
+  template <typename Opts> void _setOptions(const Opts &options);
   bool _setURL(const char *url);
   bool _parseURL(const char *url, char *host, char *path, uint16_t& port, bool& secure);
 
@@ -255,8 +261,7 @@ private:
   void _onError(AsyncClient *client, int code, const char *error);
 
   void _addHeaders(const HeadersMap &headers);
-  void _addHeader(const char *key, size_t key_len,
-                  const CustomHeaderValue &value);
+  void _addHeader(const char *key, size_t key_len, const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();
   void _connect(const char *host, const char *path, uint16_t port, bool secure);
@@ -285,8 +290,13 @@ private:
 // ---------- template implementations (must stay in header) ----------
 
 template <size_t N, size_t M>
-void EventSource::addHeader(char (&key)[N], char (&val)[M]) {
+void EventSource::addHeader(const char (&key)[N], const char (&val)[M]) {
   _addHeader(key, N - 1, CustomHeaderValue{std::string(val, M - 1)});
+}
+
+template <size_t N>
+void EventSource::addHeader(const char (&key)[N], CustomHeaderValue& value) {
+  _addHeader(key, N - 1, value);
 }
 
 template <size_t N, typename T>

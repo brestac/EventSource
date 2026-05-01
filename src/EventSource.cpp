@@ -24,8 +24,15 @@ constexpr bool is_ip_host_v = std::is_same_v<remove_cvref_t<T>, IPAddress>;
 
 // ---------- Event ----------
 EventSource::Event::Event() {
-  memset(this, 0, sizeof(Event));
-  strncpy(type, "message", sizeof(type));
+  _hasData = false;
+  _queued = false;
+  _dispached = false;
+  data[0] = '\0';
+  type[0] = '\0';
+  origin[0] = '\0';
+  lastEventId[0] = '\0';
+  message[0] = '\0';
+  code = 0;
 }
 
 void EventSource::Event::print() {
@@ -37,6 +44,15 @@ void EventSource::Event::print() {
 
 // ---------- EventSource public ----------
 
+EventSource::EventSource() {
+  _apiHost[0] = '\0';
+  _ssePath[0] = '\0';
+  _apiPort = DEFAULT_PORT;
+  _secure = false;
+
+  _init();
+}
+
 EventSource::EventSource(const char *url, const Options &options) {
   _init(url, options);
 }
@@ -47,22 +63,22 @@ EventSource::EventSource(const char *url, const HeadersMap &headers) {
 
 EventSource::EventSource(const char *host, const char *path, uint16_t port,
                          const Options &options) {
-  _init(host, path, port, options, options.secure);
+  _init(host, path, port, options.secure, options);
 }
 
 EventSource::EventSource(const char *host, const char *path, uint16_t port,
                          const HeadersMap &headers) {
-  _init(host, path, port, headers, false);
+  _init(host, path, port, false, headers);
 }
 
 EventSource::EventSource(const IPAddress &ip, const char *path, uint16_t port,
                          const Options &options) {
-  _init(ip, path, port, options, options.secure);
+  _init(ip, path, port, options.secure, options);
 }
 
 EventSource::EventSource(const IPAddress &ip, const char *path, uint16_t port,
                          const HeadersMap &headers) {
-  _init(ip, path, port, headers, false);
+  _init(ip, path, port, false, headers);
 }
 
 EventSource::~EventSource() {
@@ -107,7 +123,10 @@ bool EventSource::_setURL(const char *url) {
   bool secure = false;
 
   bool parsed = _parseURL(url, host, path, port, secure);
-  if (!parsed) return false;
+  if (!parsed) {
+    DEBUG_PRINTF("Failed to parse URL: %s\n", url);
+    return false;
+  }
 
   strncpy(_apiHost, host, sizeof(_apiHost));
   _apiHost[sizeof(_apiHost) - 1] = '\0';
@@ -121,33 +140,16 @@ bool EventSource::_setURL(const char *url) {
 
 template <typename Opts>
 void EventSource::_init(const char *url, Opts options) {
-  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
-  char path[MAX_SSE_PATH_SIZE] = {0};  
-  uint16_t port = DEFAULT_PORT;
-  bool secure = false;
-
-  bool parsed = _parseURL(url, host, path, port, secure);
-  DEBUG_PRINTF("[SSE] Parsed URL: %s:%hu%s secure=%d\n", host, port, path, secure);
+  bool parsed = _setURL(url);
 
   if (parsed) {
-    _init(host, path, port, options, secure);
+    _setOptions(options);
+    _init();
   } 
 }
 
-template <typename Host, typename Opts>
-void EventSource::_init(Host host, const char *path, uint16_t port,
-                        const Opts &options, bool secure) {
-
-  if constexpr (is_string_host_v<Host>) {
-    strncpy(_apiHost, host, sizeof(_apiHost));
-  } else if constexpr (is_ip_host_v<Host>) {
-    strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
-  } else {
-    DEBUG_PRINTLN("Invalid host type");
-    return;
-  }
-  _apiHost[sizeof(_apiHost) - 1] = '\0';
-
+template <typename Opts>
+void EventSource::_setOptions(const Opts &options) {
   _customHeaderCount = 0;
 
   if constexpr (std::is_same_v<remove_cvref_t<Opts>, Options>) {
@@ -158,9 +160,31 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
     DEBUG_PRINTLN("Invalid options type");
     return;
   }
+}
+
+template <typename Host, typename Opts>
+void EventSource::_init(Host host, const char *path, uint16_t port, bool secure, const Opts &options) {
+
+  if constexpr (is_string_host_v<Host>) {
+    strncpy(_apiHost, host, sizeof(_apiHost));
+  } else if constexpr (is_ip_host_v<Host>) {
+    strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
+  } else {
+    DEBUG_PRINTLN("Invalid host type");
+    return;
+  }
+  _apiHost[sizeof(_apiHost) - 1] = '\0';
   
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
+  _secure = secure;
+  _apiPort = port;
+
+  _setOptions(options);
+  _init();
+}
+
+void EventSource::_init() {
 
   _client = new AsyncClient;
   _client->onConnect(_onConnectStatic, this);
@@ -169,8 +193,6 @@ void EventSource::_init(Host host, const char *path, uint16_t port,
   _client->onData(_onDataStatic, this);
 
   _retryDelay = DEFAULT_RETRY_DELAY;
-  _secure = secure;
-  _apiPort = port;
   _readyState = CONNECTING;
   _retryDelayMultiplier = 1;
   _retryCount = 0;
@@ -443,14 +465,8 @@ bool EventSource::_handleRedirection(char *data, size_t len, int statusCode) {
     strncpy(_ssePath, new_url, sizeof(_ssePath));
     _ssePath[sizeof(_ssePath) - 1] = '\0';
   } else {
-    char host[MAX_EVENT_ORIGIN_SIZE] = {0};
-    char path[MAX_SSE_PATH_SIZE] = {0};
-    uint16_t port = DEFAULT_PORT;
-    bool secure = false;
-
-    bool parsed = _parseURL(new_url, host, path, port, secure);
+    bool parsed = _setURL(new_url);
     if (!parsed) return false;
-    _setURL(new_url);
   }
 
   _force_disconnect = true;
@@ -594,11 +610,15 @@ void EventSource::_connect(const char * host, const char * path, uint16_t port, 
   _connectionTimer = millis();
   _retryCount++;
 
-#if ASYNC_TCP_SSL_ENABLED
-  _client->connect(host, port, secure);
-#else
-  _client->connect(host, port);
-#endif
+  if (host[0] == '\0' || path[0] == '\0') {
+    DEBUG_PRINTLN("[SSE] Host ou path vide");
+  } else {
+    #if ASYNC_TCP_SSL_ENABLED
+      _client->connect(host, port, secure);
+    #else
+      _client->connect(host, port);
+    #endif
+  }
 
   if (_retryCount > EXPONENTIAL_RETRY_LIMIT) {
     _retryCount = 0;
@@ -675,15 +695,20 @@ void EventSource::_setLastEventId(const char *lastEventId) {
 EventSource::Event EventSource::_newMessageEvent() {
   DEBUG_PRINTLN("Creating new event");
   Event event;
-  strncpy(event.origin, _apiHost, sizeof(event.origin));
+   // Default event type is "message"
+  strncpy(event.type, "message", sizeof(event.type));
+  event.type[sizeof(event.type) - 1] = '\0';
+
+  snprintf(event.origin, sizeof(event.origin), "http%s://%s:%hu", _secure ? "s" : "", _apiHost, _apiPort);
   event.origin[sizeof(event.origin) - 1] = '\0';
+    
   return event;
 }
 
 void EventSource::_parse_event_stream(const char *cstr, size_t len) {
   if (len == 0)
     return;
-
+// TODO: Handle UTF-8 BOM
   const char *pos = cstr;
   const char *end = cstr + len;
   size_t lines_count = 0;
@@ -778,17 +803,16 @@ void EventSource::_process_field(const char *name, const char *value,
     strncat(event.data, value, sizeof(event.data) - strlen(event.data) - 1);
     strncat(event.data, "\n", sizeof(event.data) - strlen(event.data) - 1);
     event._hasData = true;
-
   } else if (strcmp(name, "event") == 0) {
     if (strcmp(value, "ping") == 0) {
-      DEBUG_PRINTLN("Ping received, sending pong");
-      _client->write("pong\r\n", 5);
+      //DEBUG_PRINTLN("Ping received, sending pong");
+      //_client->write("pong\r\n", 6);
     } else if (strlen(value) > 0) {
       strncpy(event.type, value, sizeof(event.type));
       event.type[sizeof(event.type) - 1] = '\0';
     }
   } else if (strcmp(name, "id") == 0) {
-    if (strnchr(value, '\0', strlen(value)) == nullptr) {
+    if (strnchr(value, '\0', strlen(value)) == nullptr) {      
       _setLastEventId(value);
       strncpy(event.lastEventId, value, sizeof(event.lastEventId));
       event.lastEventId[sizeof(event.lastEventId) - 1] = '\0';
