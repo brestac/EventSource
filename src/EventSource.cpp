@@ -637,7 +637,9 @@ void EventSource::_sendRequest(AsyncClient *client) {
   len += snprintf(reqBuf + len, sizeof(reqBuf) - len, "\r\n");
 
   DEBUG_PRINTF("[SSE] Requête qui sera envoyée:\n%.*s\n", (int)len, reqBuf);
-  client->write(reqBuf, len);
+  if (client->space() > len && client->canSend()) {
+    client->write(reqBuf, len);
+  }
 }
 
 // ---------- public API ----------
