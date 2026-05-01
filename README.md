@@ -85,16 +85,17 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options& options = O
 
 ### Methods
 
-| Method | Description | Default |
-|--------|-------------|---------|
-| `addEventListener(type, handler)` | Register a callback for an event type | - |
-| `close()` | Close the connection permanently | - |
-| `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) | - |
-| `addHeader(name, value)` | Add a custom HTTP header | - |
-| `reconnect()` | Reconnect when the readyState is CLOSED, for example after a server response not OK | - |
-| `setRetryDelay(ms)` | Change default reconnect delay in ms at runtime. May be overriden by sse retry field | 3000ms |
-| `setTimeout(s)` | The timeout for the connection in seconds | 20s |
-| `update()` | Required in the loop(). Processes event queue and automatic reconnection | - |
+| Method | Description | Default | Comment |
+|--------|-------------|---------|---------|
+| `addEventListener(const char *type, const EventHandler& handler)` | Register a callback for an event type |  | handler type: `typedef std::function<void(Event &)> EventHandler`; |
+| `close()` | Close the connection permanently |  |  |
+| `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) |  |  |
+| `addHeader(const char *name, const HeaderValue& value)` | Add a custom HTTP header |  | HeaderValue type can be a const char*, a std::string or any type convertible to int or float |
+| `reconnect()` | Reconnect |  | Can be used in an error event listener for forcing a reconnection |
+| `setRetryDelay(uint32)` | Change default reconnect delay at runtime. | 3000ms | Unit: milliseconds. May be overriden by stream event retry field |
+| `setTimeout(uint32)` | The timeout for the TCP connection. | 20s | Unit: seconds |
+| `setURL(const char *)` | Sets the connection URL |  | If the url is invalid, throws an error Event and closes the connection |
+| `update()` | Processes event queue and automatic reconnection |  | Required in the loop() function. |
 
 ### Event structure
 
@@ -126,7 +127,7 @@ struct Event {
 |102|ERR_REDIRECT_LOCATION|Location header is not present.|
 |103|ERR_SERVER_INVALID_RESPONSE|Invalid response from server.|
 |104|ERR_SERVER_INVALID_CONTENT_TYPE|Content-Type is not text/event-stream.|
-|201-599|INVALID_STATUS|Invalid HTTP status code response (not 200 and not 301).|
+|201-599|INVALID_STATUS|Invalid HTTP status code response (not 200 and not 3XX).|
 
 Note: These errors will cause a permanent deconnection (readyState == CLOSED)
 You can force a reconnection with the non-normative reconnect() function.

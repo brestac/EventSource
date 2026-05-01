@@ -98,10 +98,15 @@ bool EventSource::_parseURL(const char *url, char *host, char *path, uint16_t& p
     n = sscanf(url, "%*[^:]://%127[^:/]/%127s", parsed_host, parsed_path);
     if (n < 1) {
       DEBUG_PRINTF("Failed to parse URL: %s\n", url);
+      _apiHost[0] = '\0';
+      _ssePath[0] = '\0';
+      _apiPort = DEFAULT_PORT;
+      _secure = false;
+      
       _onError(nullptr, ERR_INVALID_URL, "Failed to parse URL");
-#ifdef __EXCEPTIONS
-      throw std::runtime_error("[SyntaxError] Failed to parse URL");
-#endif
+// #ifdef __EXCEPTIONS
+//       throw std::runtime_error("[SyntaxError] Failed to parse URL");
+// #endif
       return false;
     }
   }
@@ -117,35 +122,15 @@ bool EventSource::_parseURL(const char *url, char *host, char *path, uint16_t& p
 }
 
 bool EventSource::_setURL(const char *url) {
-  char host[MAX_EVENT_ORIGIN_SIZE] = {0};
-  char path[MAX_SSE_PATH_SIZE] = {0};  
-  uint16_t port = DEFAULT_PORT;
-  bool secure = false;
-
-  bool parsed = _parseURL(url, host, path, port, secure);
-  if (!parsed) {
-    DEBUG_PRINTF("Failed to parse URL: %s\n", url);
-    return false;
-  }
-
-  strncpy(_apiHost, host, sizeof(_apiHost));
-  _apiHost[sizeof(_apiHost) - 1] = '\0';
-  snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
-  _ssePath[sizeof(_ssePath) - 1] = '\0';
-  _apiPort = port;
-  _secure = secure;
-
-  return true;
+  return _parseURL(url, _apiHost, _ssePath, _apiPort, _secure);
 }
 
 template <typename Opts>
 void EventSource::_init(const char *url, Opts options) {
-  bool parsed = _setURL(url);
-
-  if (parsed) {
-    _setOptions(options);
-    _init();
-  } 
+  _setOptions(options);
+  _init();
+  
+  _setURL(url); // _onError handler must be set before calling _setURL
 }
 
 template <typename Opts>
@@ -164,8 +149,9 @@ void EventSource::_setOptions(const Opts &options) {
 
 template <typename Host, typename Opts>
 void EventSource::_init(Host host, const char *path, uint16_t port, bool secure, const Opts &options) {
-
+  
   if constexpr (is_string_host_v<Host>) {
+    // TODO: Check if host is valid or throw an error event with code ERR_INVALID_URL
     strncpy(_apiHost, host, sizeof(_apiHost));
   } else if constexpr (is_ip_host_v<Host>) {
     strncpy(_apiHost, host.toString().c_str(), sizeof(_apiHost));
@@ -174,10 +160,11 @@ void EventSource::_init(Host host, const char *path, uint16_t port, bool secure,
     return;
   }
   _apiHost[sizeof(_apiHost) - 1] = '\0';
-  
+  // TODO: Check if path is valid or throw an error event with code ERR_INVALID_URL
   snprintf(_ssePath, sizeof(_ssePath), (path[0] != '/') ? "/%s" : "%s", path);
   _ssePath[sizeof(_ssePath) - 1] = '\0';
   _secure = secure;
+  // TODO: Check if port is valid or throw an error event with code ERR_INVALID_URL
   _apiPort = port;
 
   _setOptions(options);
