@@ -79,7 +79,7 @@ namespace {
   constexpr size_t MAX_EVENT_ERROR_SIZE = 256U;
   constexpr size_t MAX_EVENT_TYPE_SIZE = 32U;
   constexpr size_t MAX_EVENT_ORIGIN_SIZE = 128U;
-  constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 8U;
+  constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 32U;
   constexpr size_t MAX_EVENT_LINES = 20U;
   
   constexpr size_t MAX_RESPONSE_LINES = 20U;
