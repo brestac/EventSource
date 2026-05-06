@@ -2,11 +2,11 @@
   "name": "eventsource",
   "version": "0.0.1",
   "description": "EventSource server",
-  "main": "index.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node --env-file=.env server.js"
   },
   "repository": {
     "type": "git",
@@ -23,6 +23,10 @@
     "express": "^5.2.1",
     "http": "^0.0.1-security",
     "https": "^1.0.0",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "socket.io": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=20.6.0"
   }
 }

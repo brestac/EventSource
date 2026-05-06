@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ESP8266 EventSource Server</title>
+        <script src="/socket.io/socket.io.js"></script>
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+
+    <body>
+        <h1>EventSource Server</h1>
+
+        <!-- ── Status ─────────────────────────────────────────────────── -->
+        <div class="card">
+            <h2>Status</h2>
+            <div class="status-row">
+                <div class="indicator">
+                    <div class="status" id="status-sse"></div>
+                    <span id="label-sse">SSE Server: Stopped</span>
+                </div>
+                <div class="indicator">
+                    <div class="status" id="status-stream"></div>
+                    <span id="label-stream">Stream Events: Stopped</span>
+                </div>
+                <div class="indicator">
+                    <div class="status" id="status-es"></div>
+                    <span id="label-es">SSE Client: Disconnected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Server ──────────────────────────────────────────── -->
+        <div class="card">
+            <h2>Server Configuration</h2>
+            <div class="controls">
+                <!-- SSE Server toggle -->
+                <div class="control-group">
+                    <label>SSE Server</label>
+                    <button
+                        id="btn-sse"
+                        class="btn-start"
+                        onclick="toggleSSE()"
+                    >
+                        START
+                    </button>
+                </div>
+
+                <div class="sep"></div>
+
+                <!-- Status code -->
+                <div class="control-group">
+                    <label>Response Status</label>
+                    <select id="sel-status" onchange="onStatusChange()">
+                        <option value="200">200 OK</option>
+                        <option value="301">301 Moved Permanently</option>
+                        <option value="307">307 Temporary Redirect</option>
+                        <option value="450">450 User Defined</option>
+                        <option value="500">500 Internal Server Error</option>
+                    </select>
+                    <div id="location-row" class="hidden">
+                        <label>Location</label>
+                        <input
+                            type="text"
+                            id="inp-location"
+                            placeholder="/events"
+                            oninput="sendConfig()"
+                        />
+                    </div>
+                </div>
+
+                <div class="sep"></div>
+
+                <div class="sep"></div>
+
+                <!-- Toogle Sleep -->
+                <div class="control-group">
+                    <label>BLOCK RESPONSE</label>
+                    <button
+                        id="btn-sse-sleep"
+                        class="btn-start"
+                        onclick="toggleSleep()"
+                    ></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Event Stream ──────────────────────────────────────────── -->
+        <div class="card">
+            <h2>Event Stream</h2>
+            <div class="controls">
+                <!-- Stream events toggle -->
+                <div class="control-group">
+                    <label>Stream Events</label>
+                    <button
+                        id="btn-stream"
+                        class="btn-start"
+                        onclick="toggleStream()"
+                    >
+                        START
+                    </button>
+                </div>
+
+                <div class="sep"></div>
+
+                <!-- Interval stepper -->
+                <div class="control-group">
+                    <label>Send Interval (ms)</label>
+                    <div class="stepper">
+                        <button onclick="stepInterval(-500)">−</button>
+                        <input
+                            type="number"
+                            id="inp-interval"
+                            value="3000"
+                            min="100"
+                            step="100"
+                            oninput="sendConfig()"
+                        />
+                        <button onclick="stepInterval(500)">+</button>
+                    </div>
+                </div>
+
+                <!-- Retry -->
+                <div class="control-group">
+                    <label>Retry (ms)</label>
+                    <div class="stepper">
+                        <button onclick="stepRetry(-1000)">+</button>
+                        <input
+                            type="number"
+                            id="inp-retry"
+                            value="3000"
+                            min="100"
+                            step="100"
+                            oninput="sendConfig()"
+                        />
+                        <button onclick="stepRetry(1000)">+</button>
+                    </div>
+                </div>
+
+                <!-- Data -->
+                <div class="control-group">
+                    <label>Event Data</label>
+                    <input
+                        type="text"
+                        id="inp-data"
+                        value="Hello from Server"
+                        oninput="sendConfig()"
+                    />
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EventSource Console ────────────────────────────────────── -->
+        <div
+            class="card"
+            style="flex: 1; display: flex; flex-direction: column"
+        >
+            <div class="console-toolbar">
+                <h2 style="margin: 0">EventSource Console</h2>
+                <button class="btn-clear" onclick="clearConsole()">
+                    Clear
+                </button>
+            </div>
+            <div id="console">
+                <span class="log-server">— Waiting for connection —</span>
+            </div>
+        </div>
+
+        <script>
+            // ── socket.io ──────────────────────────────────────────────────────────
+            const socket = io();
+
+            socket.on("connect", () =>
+                logLine(
+                    "server",
+                    "[socket.io] Browser connected to control server",
+                ),
+            );
+            socket.on("disconnect", () =>
+                logLine(
+                    "error",
+                    "[socket.io] Browser disconnected from control server",
+                ),
+            );
+
+            socket.on("state", (s) => applyState(s));
+            socket.on("log", (msg) => {
+                logLine(
+                    "server",
+                    msg + " " + readyStateToString(es?.readyState),
+                );
+            });
+
+            // ── EventSource ────────────────────────────────────────────────────────
+            let es = null;
+
+            function openES() {
+                if (es) {
+                    es.close();
+                    es = null;
+                }
+                const sseUrl = "/events";
+                es = new EventSource(sseUrl);
+                logLine(
+                    "open",
+                    `[EventSource] Connecting to ${sseUrl}, readyState=${readyStateToString(es?.readyState)}`,
+                );
+
+                es.onopen = () => {
+                    setStatus("status-es", "on");
+                    document.getElementById("label-es").textContent =
+                        "SSE Client: Connected";
+                    logLine(
+                        "open",
+                        "[EventSource] Connection opened readyState=" +
+                            readyStateToString(es?.readyState),
+                    );
+                };
+
+                es.onmessage = (e) => {
+                    logLine("message", `[message] data: ${e.data}`);
+                };
+
+                es.addEventListener("message", (e) => {
+                    logLine(
+                        "event",
+                        `[event:message] id=${e.lastEventId}  data: ${e.data}`,
+                    );
+                });
+
+                es.addEventListener("myevent", (e) => {
+                    logLine(
+                        "event",
+                        `[event:myevent] id=${e.lastEventId}  data: ${e.data}`,
+                    );
+                });
+
+                es.onerror = (e) => {
+                    setStatus("status-es", "err");
+                    document.getElementById("label-es").textContent =
+                        "EventSource: Error / Closed";
+                    logLine(
+                        "error",
+                        `[EventSource] Error — readyState=${readyStateToString(es?.readyState)} ${e ? e.code : ""}`,
+                    );
+                    console.log(e);
+                };
+            }
+
+            function closeES() {
+                setStatus("status-es", "");
+                document.getElementById("label-es").textContent =
+                    "EventSource: Disconnected";
+                logLine(
+                    "error",
+                    "[EventSource] Connection closed " +
+                        readyStateToString(es?.readyState),
+                );
+
+                if (es) {
+                    es.close();
+                    es = null;
+                }
+            }
+
+            // ── Apply state from server ────────────────────────────────────────────
+            let currentState = {};
+
+            function applyState(s) {
+                const wasRunning = currentState.sseRunning;
+                currentState = s;
+
+                // SSE server button
+                const btnSSE = document.getElementById("btn-sse");
+                btnSSE.textContent = s.sseRunning ? "STOP" : "START";
+                btnSSE.className = s.sseRunning ? "btn-stop" : "btn-start";
+                setStatus("status-sse", s.sseRunning ? "on" : "");
+                document.getElementById("label-sse").textContent = s.sseRunning
+                    ? "SSE Server: Running"
+                    : "SSE Server: Stopped";
+                if (s.sseRunning && !wasRunning) openES();
+                else if (!s.sseRunning && wasRunning) closeES();
+
+                // Stream button
+                const btnStream = document.getElementById("btn-stream");
+                btnStream.textContent = s.streamRunning ? "STOP" : "START";
+                btnStream.className = s.streamRunning
+                    ? "btn-stop"
+                    : "btn-start";
+                setStatus("status-stream", s.streamRunning ? "on" : "");
+                document.getElementById("label-stream").textContent =
+                    s.streamRunning
+                        ? "Stream Events: Running"
+                        : "Stream Events: Stopped";
+
+                // Server simulate timeout
+                const btnSleep = document.getElementById("btn-sse-sleep");
+
+                btnSleep.textContent = s.sleep ? "DISABLE" : "ENABLE";
+                btnSleep.className = s.sleep ? "btn-stop" : "btn-start";
+
+                // Config fields (avoid overwriting while user is typing)
+                document.getElementById("sel-status").value = String(
+                    s.statusCode,
+                );
+                updateLocationRow(s.statusCode);
+                document.getElementById("inp-location").value =
+                    s.locationHeader || "";
+                document.getElementById("inp-retry").value = s.retry;
+                document.getElementById("inp-data").value = s.data;
+                document.getElementById("inp-interval").value = s.intervalMs;
+            }
+
+            // ── Controls ───────────────────────────────────────────────────────────
+            function toggleSSE() {
+                if (currentState.sseRunning) socket.emit("stop-sse");
+                else socket.emit("start-sse");
+            }
+
+            function toggleSleep() {
+                if (currentState.sleep) socket.emit("disable-sse-sleep");
+                else socket.emit("enable-sse-sleep");
+            }
+
+            function toggleStream() {
+                if (currentState.streamRunning) socket.emit("stop-stream");
+                else socket.emit("start-stream");
+            }
+
+            function onStatusChange() {
+                updateLocationRow(
+                    parseInt(document.getElementById("sel-status").value, 10),
+                );
+                sendConfig();
+            }
+
+            function updateLocationRow(code) {
+                const row = document.getElementById("location-row");
+                if (code >= 300 && code < 400) row.classList.remove("hidden");
+                else row.classList.add("hidden");
+            }
+
+            function sendConfig() {
+                const cfg = {
+                    statusCode: parseInt(
+                        document.getElementById("sel-status").value,
+                        10,
+                    ),
+                    locationHeader:
+                        document.getElementById("inp-location").value,
+                    retry:
+                        parseInt(
+                            document.getElementById("inp-retry").value,
+                            10,
+                        ) || 3000,
+                    data: document.getElementById("inp-data").value,
+                    intervalMs:
+                        parseInt(
+                            document.getElementById("inp-interval").value,
+                            10,
+                        ) || 3000,
+                };
+                socket.emit("config", cfg);
+            }
+
+            function stepInterval(delta) {
+                const inp = document.getElementById("inp-interval");
+                const val = Math.max(
+                    100,
+                    (parseInt(inp.value, 10) || 3000) + delta,
+                );
+                inp.value = val;
+                sendConfig();
+            }
+
+            function stepRetry(delta) {
+                const inp = document.getElementById("inp-retry");
+                const val = Math.max(
+                    100,
+                    (parseInt(inp.value, 10) || 3000) + delta,
+                );
+                inp.value = val;
+                sendConfig();
+            }
+
+            // ── Console ────────────────────────────────────────────────────────────
+            const consoleEl = document.getElementById("console");
+
+            function logLine(type, text) {
+                const atBottom =
+                    consoleEl.scrollHeight -
+                        consoleEl.scrollTop -
+                        consoleEl.clientHeight <
+                    40;
+                const line = document.createElement("div");
+                line.className = `log-line log-${type}`;
+                const now = new Date().toLocaleTimeString("en-GB", {
+                    hour12: false,
+                    fractionalSecondDigits: 3,
+                });
+                line.textContent = `[${now}] ${text}`;
+                consoleEl.appendChild(line);
+                if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+
+            function clearConsole() {
+                consoleEl.innerHTML = "";
+            }
+
+            // ── Helpers ────────────────────────────────────────────────────────────
+            function setStatus(id, cls) {
+                const statusEl = document.getElementById(id);
+                if (statusEl) {
+                    statusEl.className =
+                        "status" + (cls?.length ? " " + cls : "");
+                } else {
+                    console.warn("cannot find element with id", id);
+                }
+            }
+
+            function readyStateToString(rs) {
+                return ["CONNECTING", "OPEN", "CLOSED"][rs] ?? "UNKNOWN";
+            }
+        </script>
+    </body>
+</html>

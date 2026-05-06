@@ -1,21 +1,33 @@
 
 # Node
 node_modules/
+.env
 
 #Server SSL keys
 *.key
 *.crt
 *cer
 server.conf
-generate_cert.sh
+gen_server_cert.sh
 
 #Passwords
 credentials.h
 
 #stubs
+src/ESPAsyncTCP.cpp
 src/ESPAsyncTCP.h
 src/Ticker.h
 src/IPAddress.h
 
-examples/BasicEventSource/EventSource.h
-examples/BasicEventSource/EventSource.cpp
+#Local testing
+examples/BasicEventSource-debug
+
+#Replit
+.agents
+.replit
+main.cpp
+main
+replit.md
+Makefile
+/package-lock.json
+/package.json
