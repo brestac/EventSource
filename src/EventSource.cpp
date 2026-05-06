@@ -13,9 +13,6 @@ template <typename T> struct is_char_array : std::false_type {};
 template <typename T, size_t N>
 struct is_char_array<T[N]> : std::is_same<remove_cvref_t<T>, char> {};
 
-// template <typename T>
-// inline constexpr bool is_char_array_v = is_char_array<T>::value;
-
 template <typename T>
 constexpr bool is_string_host_v =
     std::is_same_v<remove_cvref_t<T>, char *> || is_char_array<T>::value;
@@ -23,6 +20,7 @@ template <typename T>
 constexpr bool is_ip_host_v = std::is_same_v<remove_cvref_t<T>, IPAddress>;
 
 // ---------- Event ----------
+
 EventSource::Event::Event() {
   _hasData = false;
   _queued = false;
@@ -186,11 +184,11 @@ void EventSource::_init() {
   _lastEventId[0] = '\0';
   _connectionTimer = 0;
   _dispachQueueSize = 0;
-  _lock_queue = false;
+  _lockQueue = false;
   _eventHandlerCount = 0;
   _timeout = DEFAULT_TIMEOUT * 1000;
-  _force_connect = true;
-  _force_disconnect = false;
+  _forceConnect = true;
+  _forceDisconnect = false;
 
   _client->setRxTimeout(_timeout);
 
@@ -244,16 +242,16 @@ void EventSource::_update() {
 #endif
 
   if (_client->connected()) {
-    if (_force_disconnect) {
+    if (_forceDisconnect) {
       DEBUG_PRINTLN("[SSE] Force disconnect");
       _connectionTimer = millis();
-      _force_disconnect = false;
+      _forceDisconnect = false;
       _client->close();
     }
-  } else if (_force_connect || (millis() - _connectionTimer) > _retryDelay * _retryDelayMultiplier) {
+  } else if (_forceConnect || (millis() - _connectionTimer) > _retryDelay * _retryDelayMultiplier) {
     
-    DEBUG_PRINTF("[SSE] Reconnecting after %llu ms reason:%s\n", millis() - _connectionTimer, _force_connect ? "force" : "retry timeout");
-    _force_connect = false;
+    DEBUG_PRINTF("[SSE] Reconnecting after %llu ms reason:%s\n", millis() - _connectionTimer, _forceConnect ? "force" : "retry timeout");
+    _forceConnect = false;
     _connect();
   }
 }
@@ -456,8 +454,8 @@ bool EventSource::_handleRedirection(char *data, size_t len, int statusCode) {
     if (!parsed) return false;
   }
 
-  _force_disconnect = true;
-  _force_connect = true;
+  _forceDisconnect = true;
+  _forceConnect = true;
   _readyState = CONNECTING;
 
   return true;
@@ -543,7 +541,7 @@ void EventSource::_dispachEvent(Event &event) {
 }
 
 void EventSource::_addToQueue(Event &event) {
-  if (_lock_queue || event._queued)
+  if (_lockQueue || event._queued)
     return;
   if (_dispachQueueSize >= MAX_DISPACH_QUEUE_SIZE)
     return;
@@ -564,7 +562,7 @@ void EventSource::_addToQueue(Event &event) {
 void EventSource::_processQueue() {
   if (_dispachQueueSize == 0)
     return;
-  _lock_queue = true;
+  _lockQueue = true;
 
   size_t toProcess = _dispachQueueSize;
   for (size_t j = 0; j < toProcess; j++) {
@@ -572,13 +570,13 @@ void EventSource::_processQueue() {
     for (size_t i = 0; i < _dispachQueueSize - 1; i++)
       _dispachQueue[i] = _dispachQueue[i + 1];
     _dispachQueueSize--;
-    _lock_queue = false;
+    _lockQueue = false;
     _dispachEvent(event);
     event._queued = false;
-    _lock_queue = true;
+    _lockQueue = true;
   }
 
-  _lock_queue = false;
+  _lockQueue = false;
 }
 
 // ---------- connection ----------
@@ -652,7 +650,7 @@ void EventSource::close() {
 }
 
 void EventSource::reconnect() {
-  _force_disconnect = true;
+  _forceDisconnect = true;
   _readyState = CONNECTING;
 }
 
@@ -679,8 +677,6 @@ void EventSource::_setLastEventId(const char *lastEventId) {
   }
 }
 
-// ---------- SSE parsing ----------
-
 EventSource::Event EventSource::_newMessageEvent() {
   DEBUG_PRINTLN("Creating new event");
   Event event;
@@ -693,6 +689,8 @@ EventSource::Event EventSource::_newMessageEvent() {
     
   return event;
 }
+
+// ---------- Parsing ----------
 
 void EventSource::_parse_event_stream(const char *cstr, size_t len) {
   if (len == 0)

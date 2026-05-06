@@ -23,21 +23,23 @@
 */
 #pragma once
 
-#ifdef DEBUG_ESP_PORT
-#ifdef ARDUINO
-#include "HardwareSerial.h"
-#define DEBUG_PRINTLN(x) DEBUG_ESP_PORT.println(x)
-#define DEBUG_PRINTF(x...) DEBUG_ESP_PORT.printf(x)
-#define DEBUG_PRINT(x) DEBUG_ESP_PORT.print(x)
-#elif defined(__linux__) || defined(__APPLE__)
-#define DEBUG_PRINTLN(x) std::printf("%s\n", x)
-#define DEBUG_PRINTF(x...) std::printf(x)
-#define DEBUG_PRINT(x) std::printf(x)
-#endif
+#if !defined(DEBUG_PRINTLN) && !defined(DEBUG_PRINTF) && !defined(DEBUG_PRINT)
+
+#if defined(DEBUG_ESP_PORT) && defined(ARDUINO)
+  #include "HardwareSerial.h"
+  #define DEBUG_PRINTLN(x) DEBUG_ESP_PORT.println(x)
+  #define DEBUG_PRINTF(x...) DEBUG_ESP_PORT.printf(x)
+  #define DEBUG_PRINT(x) DEBUG_ESP_PORT.print(x)
+#elif defined(DEBUG_ESP_PORT) && (defined(__linux__) || defined(__APPLE__))
+  #define DEBUG_PRINTLN(x) std::printf("%s\n", x)
+  #define DEBUG_PRINTF(x...) std::printf(x)
+  #define DEBUG_PRINT(x) std::printf(x)
 #else
-#define DEBUG_PRINTLN(x)
-#define DEBUG_PRINTF(x...)
-#define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINTF(x...)
+  #define DEBUG_PRINT(x)
+#endif
+
 #endif
 
 #ifdef ARDUINO
@@ -63,34 +65,35 @@
 
 using namespace std;
 
-constexpr size_t MAX_SSE_REQUEST_SIZE = 1024U;
-constexpr size_t MAX_SSE_PATH_SIZE = 128U;
-constexpr uint32_t DEFAULT_RETRY_DELAY = 3000U;
-constexpr size_t EXPONENTIAL_RETRY_LIMIT = 10U;
-constexpr uint16_t DEFAULT_PORT = 80U;
-constexpr uint32_t DEFAULT_TIMEOUT = 20U;
-constexpr size_t MAX_EVENT_NAME_SIZE = 32U;
-
-constexpr size_t MAX_EVENT_VALUE_SIZE = 1024U;
-constexpr size_t MAX_EVENT_DATA_SIZE = 1024U;
-constexpr size_t MAX_EVENT_ERROR_SIZE = 256U;
-constexpr size_t MAX_EVENT_TYPE_SIZE = 32U;
-constexpr size_t MAX_EVENT_ORIGIN_SIZE = 128U;
-constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 8U;
-constexpr size_t MAX_EVENT_LINES = 20U;
-
-constexpr size_t MAX_RESPONSE_LINES = 20U;
-constexpr uint8_t MAX_HEADER_COUNT = 8U;
-constexpr size_t MAX_HEADER_KEY_SIZE = 64U;
-constexpr size_t MAX_HEADER_VALUE_SIZE = 128U;
-
-constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
-constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
-constexpr const char *DEFAULT_HEADERS = "Accept: text/event-stream\r\n"
-                                        "Connection: keep-alive\r\n"
-                                        "Cache-Control: no-cache\r\n"
-                                        "Accept-Encoding: identity\r\n";
-
+namespace {
+  constexpr size_t MAX_SSE_REQUEST_SIZE = 1024U;
+  constexpr size_t MAX_SSE_PATH_SIZE = 128U;
+  constexpr uint32_t DEFAULT_RETRY_DELAY = 3000U;
+  constexpr size_t EXPONENTIAL_RETRY_LIMIT = 10U;
+  constexpr uint16_t DEFAULT_PORT = 80U;
+  constexpr uint32_t DEFAULT_TIMEOUT = 20U;
+  constexpr size_t MAX_EVENT_NAME_SIZE = 32U;
+  
+  constexpr size_t MAX_EVENT_VALUE_SIZE = 1024U;
+  constexpr size_t MAX_EVENT_DATA_SIZE = 1024U;
+  constexpr size_t MAX_EVENT_ERROR_SIZE = 256U;
+  constexpr size_t MAX_EVENT_TYPE_SIZE = 32U;
+  constexpr size_t MAX_EVENT_ORIGIN_SIZE = 128U;
+  constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 8U;
+  constexpr size_t MAX_EVENT_LINES = 20U;
+  
+  constexpr size_t MAX_RESPONSE_LINES = 20U;
+  constexpr uint8_t MAX_HEADER_COUNT = 8U;
+  constexpr size_t MAX_HEADER_KEY_SIZE = 64U;
+  constexpr size_t MAX_HEADER_VALUE_SIZE = 128U;
+  
+  constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
+  constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
+  constexpr const char *DEFAULT_HEADERS = "Accept: text/event-stream\r\n"
+                                          "Connection: keep-alive\r\n"
+                                          "Cache-Control: no-cache\r\n"
+                                          "Accept-Encoding: identity\r\n";
+}
 // ---------- free-function declarations ----------
 
 #ifndef ARDUINO
@@ -106,8 +109,10 @@ inline const char *strnchr(const char *str, char c, size_t max_len);
 inline char *strnstr(const char *haystack, const char *needle, size_t len);
 #endif
 
-// ---------- EventSource class ----------
+template <size_t N>
+static bool validate_event_type(const char (&str)[N]);
 
+// ---------- EventSource class ----------
 class EventSource {
 
 public:
@@ -229,13 +234,12 @@ private:
   uint8_t _readyState;
   uint64_t _connectionTimer;
   size_t _dispachQueueSize;
-  bool _lock_queue;
+  bool _lockQueue;
   size_t _retryCount;
   size_t _retryDelayMultiplier;
   uint32_t _timeout;
-  bool _force_connect;
-  bool _force_disconnect;
-  bool _headers_received;
+  bool _forceConnect;
+  bool _forceDisconnect;
 
   // Static callbacks
   static void _onConnectStatic(void *arg, AsyncClient *client);
@@ -309,24 +313,6 @@ bool EventSource::_contains(const T (&array)[N], const char *key) {
 }
 
 template <size_t N>
-static bool validate_event_type(const char (&str)[N]) {
-  if (N == 0 || (str)[0] == '\0')
-    return false;
-
-  size_t pos = 0;
-
-  while (pos < N) {
-    if (str[pos] == '\r' || str[pos] == '\n') {
-      return false;
-    }
-
-    pos++;
-  }
-
-  return true;
-}
-
-template <size_t N>
 void EventSource::addEventListener(char const (&type)[N], const EventHandler &handler) {
 
   if (!validate_event_type(type)) {
@@ -350,6 +336,24 @@ void EventSource::addEventListener(char const (&type)[N], const EventHandler &ha
   }
 }
 
+template <size_t N>
+static bool validate_event_type(const char (&str)[N]) {
+  if (N == 0 || (str)[0] == '\0')
+    return false;
+
+  size_t pos = 0;
+
+  while (pos < N) {
+    if (str[pos] == '\r' || str[pos] == '\n') {
+      return false;
+    }
+
+    pos++;
+  }
+
+  return true;
+}
+
 inline bool isdigits(const char *str) {
   while (*str) {
     if (!isdigit(*str))
@@ -358,38 +362,6 @@ inline bool isdigits(const char *str) {
   }
   return true;
 }
-
-#ifndef HAVE_STRNCHR
-inline const char *strnchr(const char *s, char c, size_t n) {
-  for (size_t i = 0; i < n && s[i] != '\0'; ++i) {
-    if (static_cast<unsigned char>(s[i]) == static_cast<unsigned char>(c))
-      return s + i;
-  }
-  return nullptr;
-}
-#endif
-
-#ifndef ARDUINO
-inline char *strnstr(const char *haystack, const char *needle, size_t len) {
-  size_t needle_len = strlen(needle);
-  if (needle_len == 0)
-    return (char *)haystack;
-  for (size_t i = 0; i <= len - needle_len; ++i) {
-    if (strncmp(haystack + i, needle, needle_len) == 0)
-      return (char *)(haystack + i);
-    if (haystack[i] == '\0')
-      break;
-  }
-  return nullptr;
-}
-
-inline uint64_t millis() {
-  static auto start = std::chrono::high_resolution_clock::now();
-  auto now = std::chrono::high_resolution_clock::now();
-  return std::chrono::duration_cast<std::chrono::milliseconds>(now - start)
-      .count();
-}
-#endif
 
 // ---------- Parsing ----------
 
@@ -494,6 +466,37 @@ inline bool _getHeaderValue(const char *data, size_t data_len,
   return false;
 }
 
+#ifndef HAVE_STRNCHR
+inline const char *strnchr(const char *s, char c, size_t n) {
+  for (size_t i = 0; i < n && s[i] != '\0'; ++i) {
+    if (static_cast<unsigned char>(s[i]) == static_cast<unsigned char>(c))
+      return s + i;
+  }
+  return nullptr;
+}
+#endif
+
+#ifndef ARDUINO
+inline char *strnstr(const char *haystack, const char *needle, size_t len) {
+  size_t needle_len = strlen(needle);
+  if (needle_len == 0)
+    return (char *)haystack;
+  for (size_t i = 0; i <= len - needle_len; ++i) {
+    if (strncmp(haystack + i, needle, needle_len) == 0)
+      return (char *)(haystack + i);
+    if (haystack[i] == '\0')
+      break;
+  }
+  return nullptr;
+}
+
+inline uint64_t millis() {
+  static auto start = std::chrono::high_resolution_clock::now();
+  auto now = std::chrono::high_resolution_clock::now();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(now - start)
+      .count();
+}
+#endif
 // template<size_t N>
 // inline void _strncpy(char (&dest)[N], const char *src, size_t dest_size) {
 //   if (dest_size == 0) {
