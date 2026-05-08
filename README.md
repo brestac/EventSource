@@ -90,7 +90,7 @@ EventSource(IPAdress& ip, const char *path, uint_16_t port, Options& options = O
 | `addEventListener(const char *type, const EventHandler& handler)` | Register a callback for an event type |  | handler type: `typedef std::function<void(Event &)> EventHandler`; |
 | `close()` | Close the connection permanently |  |  |
 | `readyState()` | Returns `CONNECTING`(0), `OPEN`(1) or `CLOSED`(2) |  |  |
-| `addHeader(const char *name, const HeaderValue& value)` | Add a custom HTTP header |  | HeaderValue type can be a const char*, a std::string or any type convertible to int or float |
+| `addHeader(const char *name, const HeaderValue& value)` | Add a custom HTTP header, overrides header with same key. |  | HeaderValue type can be a litteral string, a std::string or any type convertible to int or float |
 | `reconnect()` | Reconnect |  | Can be used in an error event listener for forcing a reconnection |
 | `setRetryDelay(uint32)` | Change default reconnect delay at runtime. | 3000ms | Unit: milliseconds. May be overriden by stream event retry field |
 | `setTimeout(uint32)` | The timeout for the TCP connection. | 20s | Unit: seconds |
