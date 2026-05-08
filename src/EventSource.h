@@ -289,6 +289,8 @@ private:
 
   template <size_t N, typename T>
   bool _contains(const T (&array)[N], const char *key);
+  template <size_t N, typename T>
+  int _indexOf(const T (&array)[N], const char *key);
 };
 
 // ---------- template implementations (must stay in header) ----------
@@ -304,12 +306,18 @@ void EventSource::addHeader(const char (&key)[N], const CustomHeaderValue& value
 }
 
 template <size_t N, typename T>
-bool EventSource::_contains(const T (&array)[N], const char *key) {
+int EventSource::_indexOf(const T (&array)[N], const char *key) {
   for (size_t i = 0; i < N; ++i) {
     if (strcmp(array[i].key, key) == 0)
-      return true;
+      return i;
   }
-  return false;
+
+  return -1;
+}
+
+template <size_t N, typename T>
+bool EventSource::_contains(const T (&array)[N], const char *key) {
+  return _indexOf(array, key) != -1;
 }
 
 template <size_t N>
