@@ -73,7 +73,7 @@ namespace {
   constexpr uint16_t DEFAULT_PORT = 80U;
   constexpr uint32_t DEFAULT_TIMEOUT = 20U;
   constexpr size_t MAX_EVENT_NAME_SIZE = 32U;
-  
+
   constexpr size_t MAX_EVENT_VALUE_SIZE = 1024U;
   constexpr size_t MAX_EVENT_DATA_SIZE = 1024U;
   constexpr size_t MAX_EVENT_ERROR_SIZE = 256U;
@@ -81,12 +81,12 @@ namespace {
   constexpr size_t MAX_EVENT_ORIGIN_SIZE = 128U;
   constexpr uint8_t MAX_EVENT_HANDLER_COUNT = 32U;
   constexpr size_t MAX_EVENT_LINES = 20U;
-  
+
   constexpr size_t MAX_RESPONSE_LINES = 20U;
-  constexpr uint8_t MAX_HEADER_COUNT = 8U;
+  constexpr uint8_t MAX_HEADER_COUNT = 32U;
   constexpr size_t MAX_HEADER_KEY_SIZE = 64U;
   constexpr size_t MAX_HEADER_VALUE_SIZE = 128U;
-  
+
   constexpr size_t MAX_DISPACH_QUEUE_SIZE = 10U;
   constexpr uint32_t QUEUE_PROCESSING_INTERVAL = 100U;
   constexpr const char *DEFAULT_HEADERS = "Accept: text/event-stream\r\n"
@@ -192,7 +192,7 @@ public:
   const char *host() const { return _apiHost; }
   const char *path() const { return _ssePath; }
   uint16_t port() const { return _apiPort; }
-  
+
   uint8_t readyState() { return _readyState; }
   bool secure() const { return _secure; }
   uint32_t retryDelay() const { return _retryDelay; }
@@ -450,14 +450,14 @@ inline bool _getHeaderValue(const char *data, size_t data_len,
   size_t it = 0;
   while (pos < headers_end && it < MAX_RESPONSE_LINES) {
     size_t line_len = linelen(pos, headers_end);
-    
+
     DEBUG_PRINTF("[EventSource] Line %zu: '%.*s'\n", it, (int)line_len, pos);
     if (_extractHeaderValue(pos, line_len, header_name, header_value)) {
       DEBUG_PRINTF("[EventSource] Found header '%s' with value '%s'\n",
                    header_name, header_value);
       return true;
     }
-    
+
     pos += line_len;
     skip_eol(pos, headers_end);
     it++;
