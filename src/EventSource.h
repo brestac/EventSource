@@ -177,8 +177,8 @@ public:
   ~EventSource();
 
   template <size_t N> void addEventListener(char const (&type)[N], const EventHandler &handler);
-  template <size_t N, size_t M> void addHeader(const char (&key)[N], const char (&val)[M]);
-  template <size_t N> void addHeader(const char (&key)[N], const CustomHeaderValue& value);
+  template <size_t N, size_t M> void setHeader(const char (&key)[N], const char (&val)[M]);
+  template <size_t N> void setHeader(const char (&key)[N], const CustomHeaderValue& value);
   void close();
   void reconnect();
   void setRetryDelay(uint32_t retryDelay);
@@ -264,8 +264,8 @@ private:
   void _onError(AsyncClient *client, int error);
   void _onError(AsyncClient *client, int code, const char *error);
 
-  void _addHeaders(const HeadersMap &headers);
-  void _addHeader(const char *key, size_t key_len, const CustomHeaderValue &value);
+  void _setHeaders(const HeadersMap &headers);
+  void _setHeader(const char *key, size_t key_len, const CustomHeaderValue &value);
   void _sendRequest(AsyncClient *c);
   void _connect();
   void _connect(const char *host, const char *path, uint16_t port, bool secure);
@@ -296,13 +296,13 @@ private:
 // ---------- template implementations (must stay in header) ----------
 
 template <size_t N, size_t M>
-void EventSource::addHeader(const char (&key)[N], const char (&val)[M]) {
-  _addHeader(key, N - 1, CustomHeaderValue{std::string(val, M - 1)});
+void EventSource::setHeader(const char (&key)[N], const char (&val)[M]) {
+  _setHeader(key, N - 1, CustomHeaderValue{std::string(val, M - 1)});
 }
 
 template <size_t N>
-void EventSource::addHeader(const char (&key)[N], const CustomHeaderValue& value) {
-  _addHeader(key, N - 1, value);
+void EventSource::setHeader(const char (&key)[N], const CustomHeaderValue& value) {
+  _setHeader(key, N - 1, value);
 }
 
 template <size_t N, typename T>

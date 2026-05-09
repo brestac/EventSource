@@ -136,9 +136,9 @@ void EventSource::_setOptions(const Opts &options) {
   _customHeaderCount = 0;
 
   if constexpr (std::is_same_v<remove_cvref_t<Opts>, Options>) {
-    _addHeaders(options.headers);
+    _setHeaders(options.headers);
   } else if constexpr (std::is_same_v<remove_cvref_t<Opts>, HeadersMap>) {
-    _addHeaders(options);
+    _setHeaders(options);
   } else {
     DEBUG_PRINTLN("Invalid options type");
     return;
@@ -208,9 +208,9 @@ void EventSource::_init() {
                _apiPort, _ssePath, _retryDelay);
 }
 
-void EventSource::_addHeaders(const HeadersMap &headers) {
+void EventSource::_setHeaders(const HeadersMap &headers) {
   for (const auto &header : headers) {
-    _addHeader(header.first.c_str(), header.first.length(), header.second);
+    _setHeader(header.first.c_str(), header.first.length(), header.second);
   }
 }
 // ---------- update (main loop) ----------
@@ -258,7 +258,7 @@ void EventSource::_update() {
 
 // ---------- header management ----------
 
-void EventSource::_addHeader(const char *key, size_t key_len,
+void EventSource::_setHeader(const char *key, size_t key_len,
                              const CustomHeaderValue &value) {
   if (_customHeaderCount >= MAX_HEADER_COUNT)
     return;
